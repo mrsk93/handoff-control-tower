@@ -1,0 +1,11 @@
+{
+  "name": "@handoff/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "@handoff/config": "workspace:*",
+    "drizzle-orm": "^0.44.5",
+    "pg": "^8.16.3"
+  }
+}
