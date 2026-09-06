@@ -244,6 +244,7 @@ export const shipments = pgTable(
     orderId: uuid("order_id")
       .notNull()
       .references(() => orders.id),
+    sourceShipmentId: text("source_shipment_id"),
     externalShipmentId: text("external_shipment_id"),
     carrierCode: text("carrier_code").notNull(),
     serviceCode: text("service_code").notNull(),
@@ -255,6 +256,7 @@ export const shipments = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
+    uniqueIndex("shipments_tenant_source_id_uq").on(table.tenantId, table.sourceShipmentId),
     uniqueIndex("shipments_tenant_tracking_uq").on(
       table.tenantId,
       table.trackingNumber,

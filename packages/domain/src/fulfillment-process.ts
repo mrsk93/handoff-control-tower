@@ -16,7 +16,8 @@ export type FulfillmentProcessException = {
     | "INVALID_QUANTITY"
     | "NON_MONOTONIC_WMS_UPDATE"
     | "WAREHOUSE_IDENTITY_CONFLICT"
-    | "CANCEL_AFTER_SHIPMENT";
+    | "CANCEL_AFTER_SHIPMENT"
+    | "COMMERCE_REVISION_CONFLICT";
   severity: "high" | "critical";
   lineId?: string;
   summary: string;

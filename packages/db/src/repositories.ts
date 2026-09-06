@@ -38,7 +38,7 @@ export function createOrderRepository(db: Database) {
 }
 
 export type InboxPrerequisite = {
-  type: "order";
+  type: "order" | "fulfillment" | "shipment";
   key: string;
 };
 
@@ -72,16 +72,19 @@ function isOlderSourceVersion(incoming: string, known: string): boolean {
   return incoming < known;
 }
 
-async function orderExists(
+async function prerequisiteExists(
   transaction: Transaction,
   tenantId: string,
-  sourceOrderId: string,
+  prerequisite: InboxPrerequisite,
 ): Promise<boolean> {
-  const rows = await transaction
-    .select({ id: orders.id })
-    .from(orders)
-    .where(and(eq(orders.tenantId, tenantId), eq(orders.sourceOrderId, sourceOrderId)))
-    .limit(1);
+  const rows =
+    prerequisite.type === "order"
+      ? await transaction
+          .select({ id: orders.id })
+          .from(orders)
+          .where(and(eq(orders.tenantId, tenantId), eq(orders.sourceOrderId, prerequisite.key)))
+          .limit(1)
+      : [];
   return rows.length > 0;
 }
 
@@ -122,7 +125,7 @@ export function createInboxRepository(db: Database) {
           );
         const missingPrerequisite =
           options.prerequisite !== undefined &&
-          !(await orderExists(transaction, scoped.tenantId, options.prerequisite.key));
+          !(await prerequisiteExists(transaction, scoped.tenantId, options.prerequisite));
         const status = stale ? "ignored" : missingPrerequisite ? "parked" : "received";
         const terminal = status === "ignored";
         const inserted = await transaction
