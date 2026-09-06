@@ -4,7 +4,7 @@ This repository is a production-style portfolio demonstration of the commerce â†
 
 ## Current milestone
 
-M5 adds versioned external adapter ports and deterministic synthetic commerce, warehouse, carrier, and billing mocks on top of the M0/M1 platform, M2 domain primitives, M3 inbox intake, and M4 outbox dispatcher. The mocks keep state outside PostgreSQL, support tenant-scoped reference lookup and pagination, and expose reproducible failures/delays by scenario seed. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. Fulfillment processing and operator UI remain deferred.
+M7 adds the fulfillment process manager and named exception commands on top of the M0-M5 platform. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. Reconciliation, operator API/UI, and production vendor integrations remain deferred.
 
 ## Local setup
 
@@ -28,6 +28,8 @@ pnpm test:inbox-ingestion
 pnpm test:outbox-dispatcher
 pnpm test:mock-adapters
 pnpm test:simulator
+pnpm test:fulfillment-process
+pnpm test:exception-commands
 pnpm start:api
 ```
 

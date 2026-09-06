@@ -54,6 +54,23 @@
 - Truthful boundary: adapter names and URLs are explicitly synthetic. No proprietary WMS, commerce, carrier, or billing contract is claimed or implemented.
 - Acceptance: shared contract tests cover all four adapters for idempotency, lookup, pagination, tenant isolation, deterministic failure replay, and delays; simulator control tests cover validation and the production/disabled guard.
 
+## M6 — Fulfillment process manager
+
+- Status: complete
+- Process seam: a framework-independent domain process model validates accepted commerce orders, warehouse source versions, monotonic quantity evidence, shipment bounds, and cancellation compensation outcomes.
+- Persistence: the process manager claims durable inbox messages, commits canonical order/fulfillment/shipment state, audit evidence, parked-message wake-ups, and outbound WMS/carrier/commerce/billing messages in one PostgreSQL transaction. Remote I/O remains outside database transactions.
+- Paths: full handoff, partial shipment, out-of-order WMS acknowledgment, carrier/shipment sync, commerce read-back, guarded billing eligibility, and cancellation-after-shipment conflict evidence are covered with synthetic fixtures.
+- Delivery semantics: processing remains at-least-once; inbox and outbox idempotency keys make replay safe. No exactly-once claim is made.
+- Acceptance: `tests/integration/fulfillment-process-manager.test.ts` passed 4 PostgreSQL tests, and the domain process seam passed 5 unit tests.
+
+## M7 — Exception and resolution commands
+
+- Status: complete
+- Named commands: assignment, append-only notes, SKU mapping, short-shipment resolution, dead-letter retry, authoritative-value acceptance for identity/tracking conflicts, and low-severity dismissal. Generic resolution is rejected.
+- Concurrency: every command carries an idempotency key and expected exception version. Commands lock the tenant-scoped exception row, persist the command, state change, notes, retry effect, and audit event transactionally; concurrent resolution yields one winner and one optimistic conflict.
+- Recalculation: resolution updates blocking-exception counts and marks the process for deterministic eligibility recomputation; it never forces invoice eligibility true and never creates an accounting invoice.
+- Acceptance: `tests/integration/exception-commands.test.ts` passed 3 PostgreSQL tests, and the command domain seam passed 6 unit tests.
+
 ## Acceptance evidence
 
 ### Verified environment
@@ -91,6 +108,10 @@
 - `pnpm test:mock-adapters` — 7 adapter contract tests passed
 - `pnpm test:simulator` — 3 simulator-control tests passed
 - `pnpm check` after M5 changes — lint, format, strict typecheck, and 55 unit tests passed
+- `pnpm vitest run tests/integration/fulfillment-process-manager.test.ts` — 4 PostgreSQL process-manager tests passed
+- `pnpm vitest run tests/integration/exception-commands.test.ts` — 3 PostgreSQL exception-command tests passed
+- `pnpm vitest run tests/unit/fulfillment-process.test.ts tests/unit/exception-commands.test.ts` — 11 domain workflow/command tests passed
+- `pnpm typecheck` and `pnpm lint` after M6/M7 changes — passed
 
 The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.0.1:55432/handoff_control_tower_test`. No real customer, vendor, payment, or accounting data is used.
 
@@ -102,9 +123,11 @@ The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.
 4. `0004_shipments_process.sql` — shipments, shipment lines, process instances.
 5. `0005_exceptions_reconciliation.sql` — exception queue and reconciliation records.
 6. `0006_audit_indexes.sql` — append-only audit events and indexes.
+7. `0007_process_manager.sql` — cancellation/exception order states and stable tenant-scoped shipment references.
+8. `0008_exception_commands.sql` — exception row versions, command idempotency records, and append-only notes.
 
 ## Known environment risks
 
 - Docker is not installed on the development host; Compose has not been executed locally unless a Docker-compatible runtime is provided.
 - Native PostgreSQL and Redis services must be started before database and readiness acceptance checks; the verified services were isolated temporary processes and are not part of the repository.
-- M5 currently stops at external mock contracts and simulator control. Domain event processing, fulfillment orchestration, reconciliation, operator commands/UI, and production vendor integrations remain intentionally deferred to later milestones.
+- M7 stops at fulfillment orchestration and named exception commands. Reconciliation, operator query/HTTP/UI surfaces, security hardening, scenario campaign, and production vendor integrations remain intentionally deferred to later milestones.
