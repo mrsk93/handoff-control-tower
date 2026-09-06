@@ -236,6 +236,8 @@ async function openException(
     now: Date;
   },
 ): Promise<void> {
+  const persistedType =
+    input.type === "NON_MONOTONIC_WAREHOUSE_UPDATE" ? "NON_MONOTONIC_WMS_UPDATE" : input.type;
   await transaction
     .insert(exceptions)
     .values({
@@ -245,7 +247,7 @@ async function openException(
       processInstanceId: null,
       orderLineId: input.orderLineId ?? null,
       shipmentId: null,
-      type: input.type,
+      type: persistedType,
       severity: input.severity,
       status: "open",
       activeKey: input.activeKey,
@@ -267,7 +269,7 @@ async function openException(
     entityId: input.orderId,
     correlationId: input.correlationId,
     causationId: input.causationId,
-    afterSummary: { type: input.type, severity: input.severity, evidence: input.evidence },
+    afterSummary: { type: persistedType, severity: input.severity, evidence: input.evidence },
     now: input.now,
   });
 }

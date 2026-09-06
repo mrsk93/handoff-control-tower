@@ -14,7 +14,7 @@ export type FulfillmentProcessException = {
   code:
     | "MISSING_SKU_MAPPING"
     | "INVALID_QUANTITY"
-    | "NON_MONOTONIC_WMS_UPDATE"
+    | "NON_MONOTONIC_WAREHOUSE_UPDATE"
     | "WAREHOUSE_IDENTITY_CONFLICT"
     | "CANCEL_AFTER_SHIPMENT"
     | "COMMERCE_REVISION_CONFLICT";
@@ -280,7 +280,7 @@ export function applyWarehouseUpdate(
       outcome: "conflict",
       fulfillment: current,
       exception: {
-        code: "NON_MONOTONIC_WMS_UPDATE",
+        code: "NON_MONOTONIC_WAREHOUSE_UPDATE",
         severity: "high",
         lineId: regression.lineId,
         summary: "warehouse quantities decreased without an explicit correction",

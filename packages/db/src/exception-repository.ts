@@ -32,13 +32,15 @@ export type ExceptionCommandExecution = {
 };
 
 function aggregateFromRow(row: typeof exceptions.$inferSelect): ExceptionAggregate {
-  if (!exceptionTypes.includes(row.type as (typeof exceptionTypes)[number])) {
+  const normalizedType =
+    row.type === "NON_MONOTONIC_WMS_UPDATE" ? "NON_MONOTONIC_WAREHOUSE_UPDATE" : row.type;
+  if (!exceptionTypes.includes(normalizedType as (typeof exceptionTypes)[number])) {
     throw new Error(`unsupported exception type stored in database: ${row.type}`);
   }
   const aggregate: ExceptionAggregate = {
     id: row.id,
     tenantId: row.tenantId,
-    type: row.type as ExceptionAggregate["type"],
+    type: normalizedType as ExceptionAggregate["type"],
     severity: row.severity as ExceptionSeverity,
     status: row.status as ExceptionStatus,
     version: row.rowVersion,

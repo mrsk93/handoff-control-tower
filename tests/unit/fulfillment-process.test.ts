@@ -121,7 +121,7 @@ describe("fulfillment process domain seam", () => {
     );
     expect(result).toMatchObject({
       outcome: "conflict",
-      exception: { code: "NON_MONOTONIC_WMS_UPDATE" },
+      exception: { code: "NON_MONOTONIC_WAREHOUSE_UPDATE" },
     });
   });
 
