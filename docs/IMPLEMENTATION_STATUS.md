@@ -44,6 +44,16 @@
 - External boundary: `DeterministicMockOutboundAdapter` is an explicit synthetic adapter that deduplicates effects by tenant, destination, and idempotency key. It is not a real commerce, WMS, carrier, or billing vendor connector.
 - Acceptance: transactional commit/rollback, duplicate appends, multi-worker claims, expired lease recovery, successful dispatch, transient retry, crash-after-effect replay, duplicate remote-effect suppression, dead-lettering, and guarded manual retry are covered by 8 PostgreSQL integration tests plus retry-policy unit coverage.
 
+## M5 — Mock adapters and contract suite
+
+- Status: complete
+- Ports: versioned, framework- and vendor-independent commerce, warehouse, carrier, and billing interfaces live in `@handoff/domain`.
+- External-process mocks: each deterministic adapter owns in-memory state outside PostgreSQL, validates tenant context, supports idempotent writes, stable reference lookup, and bounded cursor pagination.
+- Billing boundary: the billing mock accepts invoice-eligibility events only. It never creates accounting invoices.
+- Failure controls: a shared scenario controller supports reproducible seeded failure decisions, operation-specific failure budgets, and programmable delays. The API exposes guarded scenario inspection, update, and reset routes only outside production.
+- Truthful boundary: adapter names and URLs are explicitly synthetic. No proprietary WMS, commerce, carrier, or billing contract is claimed or implemented.
+- Acceptance: shared contract tests cover all four adapters for idempotency, lookup, pagination, tenant isolation, deterministic failure replay, and delays; simulator control tests cover validation and the production/disabled guard.
+
 ## Acceptance evidence
 
 ### Verified environment
@@ -78,6 +88,9 @@
 - `pnpm check` after M4 changes — lint, format, strict typecheck, and 45 unit tests passed
 - `pnpm db:migrate` — checked-in migrations completed with no pending changes
 - `pnpm db:seed` — deterministic two-tenant synthetic seed completed
+- `pnpm test:mock-adapters` — 7 adapter contract tests passed
+- `pnpm test:simulator` — 3 simulator-control tests passed
+- `pnpm check` after M5 changes — lint, format, strict typecheck, and 55 unit tests passed
 
 The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.0.1:55432/handoff_control_tower_test`. No real customer, vendor, payment, or accounting data is used.
 
@@ -94,4 +107,4 @@ The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.
 
 - Docker is not installed on the development host; Compose has not been executed locally unless a Docker-compatible runtime is provided.
 - Native PostgreSQL and Redis services must be started before database and readiness acceptance checks; the verified services were isolated temporary processes and are not part of the repository.
-- M4 currently stops at transactional outbox and generic synthetic delivery. Domain event processing, vendor-specific mock contracts, fulfillment orchestration, reconciliation, operator commands/UI, and billing-event integration remain intentionally deferred to later milestones.
+- M5 currently stops at external mock contracts and simulator control. Domain event processing, fulfillment orchestration, reconciliation, operator commands/UI, and production vendor integrations remain intentionally deferred to later milestones.

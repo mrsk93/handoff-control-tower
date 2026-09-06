@@ -15,6 +15,8 @@
     "test:integration": "vitest run tests/integration",
     "test:inbox-ingestion": "vitest run tests/integration/inbox-ingestion.test.ts",
     "test:outbox-dispatcher": "vitest run tests/integration/outbox-transaction.test.ts tests/integration/outbox-dispatcher.test.ts",
+    "test:mock-adapters": "vitest run tests/unit/mock-adapters.contract.test.ts",
+    "test:simulator": "vitest run tests/unit/simulator-control.test.ts",
     "test:tenant-isolation": "vitest run tests/integration/tenant-isolation.test.ts",
     "test:migration-from-zero": "vitest run tests/integration/migration-from-zero.test.ts",
     "test:reset-guard": "vitest run tests/unit/reset-guard.test.ts",
