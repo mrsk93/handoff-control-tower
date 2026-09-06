@@ -1,8 +1,8 @@
-import { and, asc, eq, lte, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, lte, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import type { IntegrationEvent } from "@handoff/domain";
+import type { IntegrationEvent, OutboundMessage } from "@handoff/domain";
 import type { Database } from "./client";
-import { connections, inboxMessages, orders, tenants } from "./schema";
+import { connections, inboxMessages, orders, outboxMessages, tenants } from "./schema";
 import { requireTenantContext, type TenantContext } from "./tenant-context";
 import type { Transaction } from "./transaction";
 
@@ -319,6 +319,257 @@ export function createInboxRepository(db: Database) {
         .from(inboxMessages)
         .where(and(eq(inboxMessages.tenantId, scoped.tenantId), eq(inboxMessages.status, "parked")))
         .orderBy(asc(inboxMessages.createdAt));
+    },
+  };
+}
+
+export type OutboxAppendResult = {
+  duplicate: boolean;
+  message: typeof outboxMessages.$inferSelect;
+};
+
+export type OutboxWriter = {
+  append(message: OutboundMessage): Promise<OutboxAppendResult>;
+};
+
+export type OutboxFailure = {
+  error: string;
+  retryAt: Date;
+  maxAttempts: number;
+};
+
+export type OutboxClaim = typeof outboxMessages.$inferSelect;
+
+async function assertTenantExists(transaction: Transaction, tenantId: string): Promise<void> {
+  const rows = await transaction
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (rows.length === 0) throw new Error("tenant does not exist");
+}
+
+function createOutboxWriter(
+  transaction: Transaction,
+  context: TenantContext,
+  transactionNow: Date,
+): OutboxWriter {
+  return {
+    async append(message: OutboundMessage): Promise<OutboxAppendResult> {
+      if (message.tenantId !== context.tenantId) {
+        throw new Error("outbox message tenant does not match transaction tenant");
+      }
+      if (message.messageVersion < 1) {
+        throw new Error("outbox messageVersion must be positive");
+      }
+      const createdAt = transactionNow;
+      const inserted = await transaction
+        .insert(outboxMessages)
+        .values({
+          id: randomUUID(),
+          tenantId: context.tenantId,
+          destination: message.destination,
+          messageType: message.messageType,
+          messageVersion: message.messageVersion,
+          payload: message.payload,
+          idempotencyKey: message.idempotencyKey,
+          correlationId: message.correlationId,
+          causationId: message.causationId ?? null,
+          status: "pending",
+          availableAt: message.availableAt ? new Date(message.availableAt) : createdAt,
+          lockedAt: null,
+          lockedBy: null,
+          attemptCount: 0,
+          lastError: null,
+          sentAt: null,
+          createdAt,
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      if (inserted[0]) return { duplicate: false, message: inserted[0] };
+
+      const existing = await transaction
+        .select()
+        .from(outboxMessages)
+        .where(
+          and(
+            eq(outboxMessages.tenantId, context.tenantId),
+            eq(outboxMessages.destination, message.destination),
+            eq(outboxMessages.idempotencyKey, message.idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (!existing[0]) throw new Error("outbox conflict did not return the existing message");
+      return { duplicate: true, message: existing[0] };
+    },
+  };
+}
+
+export function createOutboxRepository(db: Database) {
+  return {
+    async inTransaction<T>(
+      context: TenantContext,
+      operation: (transaction: Transaction, outbox: OutboxWriter) => Promise<T>,
+      now = new Date(),
+    ): Promise<T> {
+      const scoped = requireTenantContext(context.tenantId);
+      return db.transaction(async (transaction) => {
+        await assertTenantExists(transaction, scoped.tenantId);
+        return operation(transaction, createOutboxWriter(transaction, scoped, now));
+      });
+    },
+
+    async claimNext(
+      context: TenantContext,
+      workerId: string,
+      now: Date,
+      leaseDurationMs: number,
+    ): Promise<OutboxClaim | null> {
+      const scoped = requireTenantContext(context.tenantId);
+      if (leaseDurationMs <= 0) throw new Error("leaseDurationMs must be positive");
+      return db.transaction(async (transaction) => {
+        const staleLeaseAt = new Date(now.getTime() - leaseDurationMs);
+        const rows = await transaction
+          .select()
+          .from(outboxMessages)
+          .where(
+            and(
+              eq(outboxMessages.tenantId, scoped.tenantId),
+              or(
+                and(
+                  inArray(outboxMessages.status, ["pending", "retry_wait"]),
+                  lte(outboxMessages.availableAt, now),
+                ),
+                and(
+                  eq(outboxMessages.status, "dispatching"),
+                  isNotNull(outboxMessages.lockedAt),
+                  lt(outboxMessages.lockedAt, staleLeaseAt),
+                ),
+              ),
+            ),
+          )
+          .orderBy(asc(outboxMessages.availableAt), asc(outboxMessages.createdAt))
+          .limit(1)
+          .for("update", { skipLocked: true });
+        const candidate = rows[0];
+        if (!candidate) return null;
+        const updated = await transaction
+          .update(outboxMessages)
+          .set({
+            status: "dispatching",
+            lockedAt: now,
+            lockedBy: workerId,
+            attemptCount: candidate.attemptCount + 1,
+          })
+          .where(
+            and(
+              eq(outboxMessages.id, candidate.id),
+              eq(outboxMessages.tenantId, scoped.tenantId),
+              eq(outboxMessages.status, candidate.status),
+            ),
+          )
+          .returning();
+        return updated[0] ?? null;
+      });
+    },
+
+    async recordSent(
+      context: TenantContext,
+      messageId: string,
+      workerId: string,
+      sentAt = new Date(),
+    ): Promise<OutboxClaim | null> {
+      const scoped = requireTenantContext(context.tenantId);
+      const updated = await db
+        .update(outboxMessages)
+        .set({
+          status: "sent",
+          sentAt,
+          lockedAt: null,
+          lockedBy: null,
+          lastError: null,
+        })
+        .where(
+          and(
+            eq(outboxMessages.id, messageId),
+            eq(outboxMessages.tenantId, scoped.tenantId),
+            eq(outboxMessages.status, "dispatching"),
+            eq(outboxMessages.lockedBy, workerId),
+          ),
+        )
+        .returning();
+      return updated[0] ?? null;
+    },
+
+    async recordFailure(
+      context: TenantContext,
+      messageId: string,
+      workerId: string,
+      failure: OutboxFailure,
+    ): Promise<OutboxClaim | null> {
+      const scoped = requireTenantContext(context.tenantId);
+      const current = await db
+        .select({ attemptCount: outboxMessages.attemptCount })
+        .from(outboxMessages)
+        .where(
+          and(
+            eq(outboxMessages.id, messageId),
+            eq(outboxMessages.tenantId, scoped.tenantId),
+            eq(outboxMessages.status, "dispatching"),
+            eq(outboxMessages.lockedBy, workerId),
+          ),
+        )
+        .limit(1);
+      if (!current[0]) return null;
+      const deadLetter = current[0].attemptCount >= failure.maxAttempts;
+      const updated = await db
+        .update(outboxMessages)
+        .set({
+          status: deadLetter ? "dead_letter" : "retry_wait",
+          availableAt: failure.retryAt,
+          lockedAt: null,
+          lockedBy: null,
+          lastError: failure.error,
+        })
+        .where(
+          and(
+            eq(outboxMessages.id, messageId),
+            eq(outboxMessages.tenantId, scoped.tenantId),
+            eq(outboxMessages.status, "dispatching"),
+            eq(outboxMessages.lockedBy, workerId),
+          ),
+        )
+        .returning();
+      return updated[0] ?? null;
+    },
+
+    async retryDeadLetter(
+      context: TenantContext,
+      messageId: string,
+      reason: string,
+      availableAt = new Date(),
+    ): Promise<OutboxClaim | null> {
+      const scoped = requireTenantContext(context.tenantId);
+      if (reason.trim().length === 0) throw new Error("manual retry reason is required");
+      const updated = await db
+        .update(outboxMessages)
+        .set({
+          status: "pending",
+          availableAt,
+          lockedAt: null,
+          lockedBy: null,
+          lastError: `manual retry: ${reason.trim()}`,
+        })
+        .where(
+          and(
+            eq(outboxMessages.id, messageId),
+            eq(outboxMessages.tenantId, scoped.tenantId),
+            eq(outboxMessages.status, "dead_letter"),
+          ),
+        )
+        .returning();
+      return updated[0] ?? null;
     },
   };
 }
