@@ -4,6 +4,7 @@
   "private": true,
   "type": "commonjs",
   "dependencies": {
+    "@handoff/adapters": "workspace:*",
     "@handoff/config": "workspace:*",
     "@handoff/db": "workspace:*",
     "@handoff/queue": "workspace:*"

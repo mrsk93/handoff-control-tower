@@ -19,6 +19,25 @@ export type MockOperation =
   | "billing.get_eligibility"
   | "billing.list_eligibility";
 
+export const mockOperations: readonly MockOperation[] = [
+  "commerce.upsert_order",
+  "commerce.get_order",
+  "commerce.list_orders",
+  "commerce.publish_fulfillment",
+  "commerce.get_fulfillment",
+  "warehouse.create_order",
+  "warehouse.get_order",
+  "warehouse.list_orders",
+  "warehouse.cancel_order",
+  "carrier.create_label",
+  "carrier.get_shipment",
+  "carrier.list_shipments",
+  "carrier.void_label",
+  "billing.publish_eligibility",
+  "billing.get_eligibility",
+  "billing.list_eligibility",
+];
+
 export type MockScenario = {
   seed: number;
   failureRate: number;

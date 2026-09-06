@@ -66,6 +66,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@handoff/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
       '@handoff/config':
         specifier: workspace:*
         version: link:../../packages/config

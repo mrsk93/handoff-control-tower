@@ -1,29 +1,33 @@
 import { DynamicModule, Module } from "@nestjs/common";
+import { createMockAdapterSuite } from "@handoff/adapters";
 import type { AppConfig } from "@handoff/config";
 import { createDatabase } from "@handoff/db";
 import Redis from "ioredis";
 import { HealthController } from "./health.controller";
 import { HealthService } from "./health.service";
 import { IngestionController } from "./ingestion.controller";
-import { APP_CONFIG, DATABASE_HANDLE, REDIS_CLIENT } from "./tokens";
+import { SimulatorController } from "./simulator.controller";
+import { APP_CONFIG, DATABASE_HANDLE, MOCK_ADAPTER_SUITE, REDIS_CLIENT } from "./tokens";
 
 @Module({
-  controllers: [HealthController, IngestionController],
+  controllers: [HealthController, IngestionController, SimulatorController],
   providers: [HealthService],
 })
 export class AppModule {
   static forRoot(config: AppConfig): DynamicModule {
     const database = createDatabase(config);
     const redis = new Redis(config.redisUrl, { lazyConnect: true, maxRetriesPerRequest: 1 });
+    const mockAdapters = createMockAdapterSuite();
     return {
       module: AppModule,
       providers: [
         { provide: APP_CONFIG, useValue: config },
         { provide: DATABASE_HANDLE, useValue: database },
         { provide: REDIS_CLIENT, useValue: redis },
+        { provide: MOCK_ADAPTER_SUITE, useValue: mockAdapters },
         HealthService,
       ],
-      controllers: [HealthController, IngestionController],
+      controllers: [HealthController, IngestionController, SimulatorController],
       exports: [HealthService],
     };
   }
