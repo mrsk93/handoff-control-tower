@@ -1,5 +1,6 @@
 export * from "./errors";
 export * from "./events";
+export * from "./external-ports";
 export * from "./integration-events";
 export * from "./invoice-eligibility";
 export * from "./outbox";
