@@ -10,11 +10,21 @@
 
 ## M1 — Local platform and schema
 
-- Status: complete pending acceptance evidence
+- Status: complete
 - Runtime: Docker Compose committed; native PostgreSQL/Redis accepted for this host because Docker is unavailable.
 - Persistence: checked-in SQL migrations, tenant-scoped repositories, transaction helper, deterministic synthetic seeds.
 - Health: liveness and dependency-aware readiness endpoints implemented.
 - Acceptance: migration-from-zero, tenant isolation, transaction rollback, reset guard, invariant, seed, and live health checks passed.
+
+## M2 — Domain models and policies
+
+- Status: complete
+- Canonical domain types and runtime schemas cover orders, fulfillment actuals, shipments, quantities, exceptions, and invoice eligibility inputs.
+- Quantity value objects and invariant checks reject negative, regressive, over-allocated, over-packed, and over-shipped state.
+- Immutable order-release and fulfillment state machines emit deterministic domain events, require reasons for manual/exception decisions, and expose duplicate-command handling through stable idempotency keys.
+- Invoice eligibility is a pure policy decision with a 27-case truth table. It emits a guarded eligibility decision/event only; it never creates accounting invoices.
+- Domain source remains framework-, ORM-, transport-, cache-, and vendor-independent; source-specific terminology is kept outside the domain seam.
+- Acceptance: `pnpm check` passed with 41 unit tests, including 27 policy combinations and the architecture dependency check.
 
 ## Acceptance evidence
 
@@ -41,6 +51,7 @@
 - `pnpm tsx scripts/verify-invariants.ts` — quantity invariants valid
 - `GET /health/live` — `{"status":"ok"}`
 - `GET /health/ready` — PostgreSQL and Redis reported `ok`
+- `pnpm check` after M2 changes — lint, format, strict typecheck, and 41 unit tests passed
 
 The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.0.1:55432/handoff_control_tower_test`. No real customer, vendor, payment, or accounting data is used.
 
@@ -55,6 +66,6 @@ The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.
 
 ## Known environment risks
 
-- This workspace has no `.git` directory, so Git history/status cannot be verified or repaired by the implementation.
 - Docker is not installed on the development host; Compose has not been executed locally unless a Docker-compatible runtime is provided.
 - Native PostgreSQL and Redis services must be started before database and readiness acceptance checks; the verified services were isolated temporary processes and are not part of the repository.
+- M2 state-machine transitions and policies are pure domain primitives; persistence integration, inbox processing, outbox dispatch, adapters, reconciliation, and UI remain intentionally deferred to later milestones.
