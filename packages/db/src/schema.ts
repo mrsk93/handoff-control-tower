@@ -369,12 +369,58 @@ export const exceptions = pgTable(
     resolutionCode: text("resolution_code"),
     resolutionReason: text("resolution_reason"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    rowVersion: integer("row_version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     index("exceptions_tenant_status_idx").on(table.tenantId, table.status),
     index("exceptions_order_idx").on(table.tenantId, table.orderId),
+  ],
+);
+
+export const exceptionCommands = pgTable(
+  "exception_commands",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    exceptionId: uuid("exception_id")
+      .notNull()
+      .references(() => exceptions.id),
+    idempotencyKey: text("idempotency_key").notNull(),
+    commandType: text("command_type").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    result: jsonb("result").notNull().default({}),
+    actorId: text("actor_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("exception_commands_tenant_idempotency_uq").on(
+      table.tenantId,
+      table.idempotencyKey,
+    ),
+    index("exception_commands_exception_idx").on(table.tenantId, table.exceptionId),
+  ],
+);
+
+export const exceptionNotes = pgTable(
+  "exception_notes",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    exceptionId: uuid("exception_id")
+      .notNull()
+      .references(() => exceptions.id),
+    authorId: text("author_id").notNull(),
+    note: text("note").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index("exception_notes_exception_idx").on(table.tenantId, table.exceptionId, table.createdAt),
   ],
 );
 
@@ -465,6 +511,8 @@ export const schema = {
   processInstances,
   outboxMessages,
   exceptions,
+  exceptionCommands,
+  exceptionNotes,
   reconciliationRuns,
   reconciliationFindings,
   auditEvents,
