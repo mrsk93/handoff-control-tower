@@ -191,22 +191,33 @@ describe("shared synthetic adapter contract", () => {
   it("reproduces seeded failures and supports programmable failure budgets", async () => {
     const scenario: MockScenario = {
       seed: 77,
-      failureRate: 1,
+      failureRate: 0.5,
       delayMs: 0,
-      failures: { "commerce.get_order": 1 },
     };
     const first = createMockAdapterSuite(scenario);
     const second = createMockAdapterSuite(scenario);
-    const read = (suite: ReturnType<typeof createMockAdapterSuite>) =>
-      suite.commerce.getOrder(context(northstar, "seeded-read"), "missing");
-    await expect(read(first)).rejects.toMatchObject({
-      operation: "commerce.get_order",
-      scenarioSeed: 77,
-    });
-    await expect(read(second)).rejects.toMatchObject({
-      operation: "commerce.get_order",
-      scenarioSeed: 77,
-    });
+    const outcomes = async (suite: ReturnType<typeof createMockAdapterSuite>) =>
+      Promise.all(
+        Array.from({ length: 6 }, async (_, index) => {
+          try {
+            await suite.commerce.getOrder(context(northstar, `seeded-read-${index}`), "missing");
+            return "success";
+          } catch (error) {
+            expect(error).toMatchObject({ operation: "commerce.get_order", scenarioSeed: 77 });
+            return "failure";
+          }
+        }),
+      );
+    const firstOutcomes = await outcomes(first);
+    expect(firstOutcomes).toEqual(await outcomes(second));
+    expect(firstOutcomes).toEqual([
+      "failure",
+      "failure",
+      "failure",
+      "failure",
+      "success",
+      "success",
+    ]);
 
     const budgeted = createMockAdapterSuite({
       seed: 3,
@@ -214,8 +225,10 @@ describe("shared synthetic adapter contract", () => {
       delayMs: 0,
       failures: { "commerce.get_order": 1 },
     });
-    await expect(read(budgeted)).rejects.toThrow("deterministic mock failure");
-    await expect(read(budgeted)).resolves.toBeNull();
+    const readBudgeted = () =>
+      budgeted.commerce.getOrder(context(northstar, "budgeted-read"), "missing");
+    await expect(readBudgeted()).rejects.toThrow("deterministic mock failure");
+    await expect(readBudgeted()).resolves.toBeNull();
   });
 
   it("reports configured delays without changing the adapter contract", async () => {
