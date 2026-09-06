@@ -4,7 +4,7 @@ This repository is a production-style portfolio demonstration of the commerce â†
 
 ## Current milestone
 
-M0/M1 establish the NestJS application shells, Drizzle/PostgreSQL persistence seam, Redis configuration, tenant-scoped repositories, checked-in migrations, deterministic seed data, and liveness/readiness checks. Domain orchestration and external adapters are intentionally deferred to later milestones.
+M3 adds signed, source-labelled mock ingress on top of the M0/M1 platform and M2 domain primitives. Inbound messages are normalized and persisted to the inbox before any later processing; duplicate and stale submissions are idempotent, and missing order prerequisites are visibly parked. Fulfillment state changes, outbox dispatch, real integrations, and operator UI remain deferred.
 
 ## Local setup
 
@@ -24,10 +24,21 @@ pnpm db:migrate
 pnpm db:seed
 pnpm db:reset
 pnpm test:integration
+pnpm test:inbox-ingestion
 pnpm start:api
 ```
 
 `pnpm db:reset` is intentionally guarded. It only operates on a database whose name begins with `handoff_control_tower_demo` or `handoff_control_tower_test`, and only in development/test environments.
+
+## Synthetic mock ingress
+
+The development/test-only mock endpoints are:
+
+- `POST /ingest/commerce/events`
+- `POST /ingest/wms/events`
+- `POST /ingest/carrier/events`
+
+Each request must include `x-tenant-id` as the trusted mock-ingress tenant context and an `x-handoff-signature` header in the form `sha256=<hex HMAC-SHA256>`. Signatures are computed over the exact raw JSON body using the source-specific synthetic secrets in `.env`. The body is bounded by `INGEST_MAX_BODY_BYTES`, validated before persistence, and never treated as a real vendor contract. Mock ingress is disabled in production and is not a proprietary WMS, carrier, commerce, or accounting integration.
 
 ## Truthful integration boundary
 

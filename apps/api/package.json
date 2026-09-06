@@ -5,6 +5,7 @@
   "type": "commonjs",
   "dependencies": {
     "@handoff/config": "workspace:*",
-    "@handoff/db": "workspace:*"
+    "@handoff/db": "workspace:*",
+    "@handoff/queue": "workspace:*"
   }
 }

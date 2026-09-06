@@ -2,5 +2,11 @@
   "name": "@handoff/queue",
   "version": "0.1.0",
   "private": true,
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "@handoff/adapters": "workspace:*",
+    "@handoff/config": "workspace:*",
+    "@handoff/db": "workspace:*",
+    "@handoff/domain": "workspace:*"
+  }
 }

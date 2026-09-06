@@ -4,10 +4,11 @@ import { createDatabase } from "@handoff/db";
 import Redis from "ioredis";
 import { HealthController } from "./health.controller";
 import { HealthService } from "./health.service";
+import { IngestionController } from "./ingestion.controller";
 import { APP_CONFIG, DATABASE_HANDLE, REDIS_CLIENT } from "./tokens";
 
 @Module({
-  controllers: [HealthController],
+  controllers: [HealthController, IngestionController],
   providers: [HealthService],
 })
 export class AppModule {
@@ -22,7 +23,7 @@ export class AppModule {
         { provide: REDIS_CLIENT, useValue: redis },
         HealthService,
       ],
-      controllers: [HealthController],
+      controllers: [HealthController, IngestionController],
       exports: [HealthService],
     };
   }

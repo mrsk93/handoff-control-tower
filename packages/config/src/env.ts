@@ -1,5 +1,11 @@
 export type AppEnvironment = "development" | "test" | "production";
 
+export type MockWebhookSecrets = {
+  commerce: string;
+  wms: string;
+  carrier: string;
+};
+
 export type AppConfig = {
   appEnv: AppEnvironment;
   port: number;
@@ -11,6 +17,8 @@ export type AppConfig = {
   reconciliationIntervalMinutes: number;
   allowPartialInvoiceEligibility: boolean;
   enableDemoSimulator: boolean;
+  ingestMaxBodyBytes: number;
+  mockWebhookSecrets: MockWebhookSecrets;
 };
 
 function required(value: string | undefined, name: string): string {
@@ -61,6 +69,20 @@ function assertUrl(value: string, name: string, protocols: readonly string[]): s
   return value;
 }
 
+function secretValue(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: string,
+  appEnv: AppEnvironment,
+): string {
+  const value = (env[name] ?? fallback).trim();
+  if (value.length < 16) throw new Error(`${name} must be at least 16 characters`);
+  if (appEnv === "production" && value === fallback) {
+    throw new Error(`${name} must be explicitly configured in production`);
+  }
+  return value;
+}
+
 export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
   const appEnv = enumValue(env.APP_ENV ?? "development", "APP_ENV", [
     "development",
@@ -104,6 +126,16 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
       false,
     ),
     enableDemoSimulator,
+    ingestMaxBodyBytes: positiveInteger(
+      env.INGEST_MAX_BODY_BYTES,
+      "INGEST_MAX_BODY_BYTES",
+      1_048_576,
+    ),
+    mockWebhookSecrets: {
+      commerce: secretValue(env, "MOCK_COMMERCE_WEBHOOK_SECRET", "local-commerce-secret", appEnv),
+      wms: secretValue(env, "MOCK_WMS_WEBHOOK_SECRET", "local-wms-secret", appEnv),
+      carrier: secretValue(env, "MOCK_CARRIER_WEBHOOK_SECRET", "local-carrier-secret", appEnv),
+    },
   };
 }
 

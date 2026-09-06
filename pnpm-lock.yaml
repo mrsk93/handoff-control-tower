@@ -72,6 +72,9 @@ importers:
       '@handoff/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@handoff/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
 
   apps/worker:
     dependencies:
@@ -79,7 +82,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/config
 
-  packages/adapters: {}
+  packages/adapters:
+    dependencies:
+      '@handoff/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/config: {}
 
@@ -99,7 +106,20 @@ importers:
 
   packages/observability: {}
 
-  packages/queue: {}
+  packages/queue:
+    dependencies:
+      '@handoff/adapters':
+        specifier: workspace:*
+        version: link:../adapters
+      '@handoff/config':
+        specifier: workspace:*
+        version: link:../config
+      '@handoff/db':
+        specifier: workspace:*
+        version: link:../db
+      '@handoff/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/shared-testkit: {}
 

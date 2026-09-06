@@ -1,5 +1,6 @@
 export * from "./errors";
 export * from "./events";
+export * from "./integration-events";
 export * from "./invoice-eligibility";
 export * from "./quantities";
 export * from "./schemas";

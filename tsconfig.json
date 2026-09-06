@@ -18,7 +18,9 @@
     "paths": {
       "@handoff/config": ["packages/config/src/index.ts"],
       "@handoff/db": ["packages/db/src/index.ts"],
-      "@handoff/domain": ["packages/domain/src/index.ts"]
+      "@handoff/domain": ["packages/domain/src/index.ts"],
+      "@handoff/adapters": ["packages/adapters/src/index.ts"],
+      "@handoff/queue": ["packages/queue/src/index.ts"]
     },
     "outDir": "dist"
   },

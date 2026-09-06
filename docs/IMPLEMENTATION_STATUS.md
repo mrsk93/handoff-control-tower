@@ -26,6 +26,15 @@
 - Domain source remains framework-, ORM-, transport-, cache-, and vendor-independent; source-specific terminology is kept outside the domain seam.
 - Acceptance: `pnpm check` passed with 41 unit tests, including 27 policy combinations and the architecture dependency check.
 
+## M3 — Inbox ingestion and idempotency
+
+- Status: complete
+- Ingress: source-specific HMAC-SHA256 verification over the exact raw body, bounded JSON payloads, trusted mock tenant context, and normalized integration envelopes.
+- Inbox: conflict-safe tenant-scoped persistence, stable message/idempotency uniqueness, source-version stale classification, prerequisite parking, claim leases, attempt counts, outcome recording, and retry/dead-letter fields.
+- Delivery semantics: at-least-once claim/outcome flow; duplicate effects are prevented by inbox uniqueness. No exactly-once transport claim is made, and no remote I/O occurs inside the inbox persistence transaction.
+- Truthful boundary: endpoints and source labels are explicitly synthetic mocks. No proprietary WMS API or real vendor connector is implemented; no accounting invoice is created.
+- Acceptance: 9 PostgreSQL integration tests passed, including concurrent duplicate contention, invalid signature/payload no-mutation checks, visible out-of-order parking, claim completion, and stale-version handling. Unit suite passed with 44 tests.
+
 ## Acceptance evidence
 
 ### Verified environment
@@ -52,6 +61,9 @@
 - `GET /health/live` — `{"status":"ok"}`
 - `GET /health/ready` — PostgreSQL and Redis reported `ok`
 - `pnpm check` after M2 changes — lint, format, strict typecheck, and 41 unit tests passed
+- `pnpm test:inbox-ingestion` — 5 PostgreSQL integration tests passed
+- `pnpm test:integration` after M3 changes — 9 PostgreSQL integration tests passed
+- signed HTTP smoke check — `/health/live` returned `200`, `/health/ready` reported PostgreSQL/Redis `ok`, and a synthetic signed commerce event returned `202` with a durable inbox ID
 
 The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.0.1:55432/handoff_control_tower_test`. No real customer, vendor, payment, or accounting data is used.
 
@@ -68,4 +80,4 @@ The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.
 
 - Docker is not installed on the development host; Compose has not been executed locally unless a Docker-compatible runtime is provided.
 - Native PostgreSQL and Redis services must be started before database and readiness acceptance checks; the verified services were isolated temporary processes and are not part of the repository.
-- M2 state-machine transitions and policies are pure domain primitives; persistence integration, inbox processing, outbox dispatch, adapters, reconciliation, and UI remain intentionally deferred to later milestones.
+- M3 currently stops at durable intake, classification, and claim/outcome primitives. Applying domain state, transactional outbox creation/dispatch, vendor adapters, reconciliation, and UI remain intentionally deferred to later milestones.

@@ -5,3 +5,4 @@
  * versioned ports and deterministic mock implementations.
  */
 export type AdapterMode = "mock";
+export * from "./mock-ingress";

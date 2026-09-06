@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:inbox-ingestion": "vitest run tests/integration/inbox-ingestion.test.ts",
     "test:tenant-isolation": "vitest run tests/integration/tenant-isolation.test.ts",
     "test:migration-from-zero": "vitest run tests/integration/migration-from-zero.test.ts",
     "test:reset-guard": "vitest run tests/unit/reset-guard.test.ts",
