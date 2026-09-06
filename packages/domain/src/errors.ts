@@ -50,3 +50,21 @@ export class InvalidTransitionError extends DomainError {
     this.name = "InvalidTransitionError";
   }
 }
+
+export class OptimisticConcurrencyError extends Error {
+  readonly code = "OPTIMISTIC_CONCURRENCY_CONFLICT";
+
+  constructor(message = "the resource changed before this command could be applied") {
+    super(message);
+    this.name = "OptimisticConcurrencyError";
+  }
+}
+
+export class InvalidExceptionCommandError extends Error {
+  readonly code = "INVALID_EXCEPTION_COMMAND";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidExceptionCommandError";
+  }
+}
