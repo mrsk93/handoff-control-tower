@@ -116,21 +116,33 @@ describe.skipIf(!testDatabaseUrl)("transactional outbox", () => {
     await repository.inTransaction(
       { tenantId: DEMO_TENANTS.northstar },
       async (_transaction, outbox) => {
-        await outbox.append(outboundMessage({ idempotencyKey: "m4-claim-1" }));
+        await outbox.append(
+          outboundMessage({
+            idempotencyKey: "m4-claim-1",
+            availableAt: new Date(now.getTime() - 1).toISOString(),
+          }),
+        );
         await outbox.append(outboundMessage({ idempotencyKey: "m4-claim-2" }));
       },
       now,
     );
 
-    const claims = await Promise.all([
-      repository.claimNext({ tenantId: DEMO_TENANTS.northstar }, "worker-a", now, 30_000),
-      repository.claimNext({ tenantId: DEMO_TENANTS.northstar }, "worker-b", now, 30_000),
-    ]);
-    expect(claims.filter((claim) => claim !== null)).toHaveLength(2);
-    expect(new Set(claims.filter((claim) => claim !== null).map((claim) => claim.id)).size).toBe(2);
-
-    const first = claims[0];
-    if (!first) throw new Error("one claim is required");
+    const first = await repository.claimNext(
+      { tenantId: DEMO_TENANTS.northstar },
+      "worker-a",
+      now,
+      30_000,
+    );
+    const second = await repository.claimNext(
+      { tenantId: DEMO_TENANTS.northstar },
+      "worker-b",
+      now,
+      30_000,
+    );
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    if (!first || !second) throw new Error("two claims are required");
+    expect(first.id).not.toBe(second.id);
     const reclaimed = await repository.claimNext(
       { tenantId: DEMO_TENANTS.northstar },
       "worker-restarted",
