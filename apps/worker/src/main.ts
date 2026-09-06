@@ -5,7 +5,8 @@ loadDotEnv();
 const config = parseConfig(process.env);
 console.log(
   JSON.stringify({
-    message: "worker shell ready; inbox processors and outbox dispatcher are deferred to M3/M4",
+    message:
+      "worker shell ready; transactional outbox dispatcher is available through @handoff/queue",
     environment: config.appEnv,
     adapterMode: config.adapterMode,
   }),

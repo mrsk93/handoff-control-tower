@@ -4,7 +4,7 @@ This repository is a production-style portfolio demonstration of the commerce â†
 
 ## Current milestone
 
-M3 adds signed, source-labelled mock ingress on top of the M0/M1 platform and M2 domain primitives. Inbound messages are normalized and persisted to the inbox before any later processing; duplicate and stale submissions are idempotent, and missing order prerequisites are visibly parked. Fulfillment state changes, outbox dispatch, real integrations, and operator UI remain deferred.
+M4 adds the transactional outbox and at-least-once dispatcher on top of the M0/M1 platform, M2 domain primitives, and M3 inbox intake. Domain state and outbound messages can commit atomically; workers claim with leases, deliver outside database transactions, retry with bounded backoff and jitter, and dead-letter exhausted work. The outbound adapter in this milestone is a deterministic synthetic mock; real vendor integrations, fulfillment processing, and operator UI remain deferred.
 
 ## Local setup
 
@@ -25,6 +25,7 @@ pnpm db:seed
 pnpm db:reset
 pnpm test:integration
 pnpm test:inbox-ingestion
+pnpm test:outbox-dispatcher
 pnpm start:api
 ```
 
