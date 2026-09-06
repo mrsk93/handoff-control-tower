@@ -6,3 +6,4 @@
  */
 export type AdapterMode = "mock";
 export * from "./mock-ingress";
+export * from "./mock-outbound";

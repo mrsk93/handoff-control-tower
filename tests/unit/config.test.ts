@@ -15,6 +15,9 @@ describe("configuration", () => {
     expect(config.appEnv).toBe("development");
     expect(config.adapterMode).toBe("mock");
     expect(config.outboxMaxAttempts).toBe(5);
+    expect(config.outboxRetryBaseMs).toBe(1000);
+    expect(config.outboxRetryMaxMs).toBe(60000);
+    expect(config.outboxRetryJitterMs).toBe(250);
   });
 
   it("refuses the demo simulator in production", () => {

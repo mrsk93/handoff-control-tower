@@ -13,6 +13,9 @@ export type AppConfig = {
   redisUrl: string;
   adapterMode: "mock";
   outboxMaxAttempts: number;
+  outboxRetryBaseMs: number;
+  outboxRetryMaxMs: number;
+  outboxRetryJitterMs: number;
   parkedEventMaxAgeMinutes: number;
   reconciliationIntervalMinutes: number;
   allowPartialInvoiceEligibility: boolean;
@@ -110,6 +113,9 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     redisUrl: assertUrl(required(env.REDIS_URL, "REDIS_URL"), "REDIS_URL", ["redis:", "rediss:"]),
     adapterMode,
     outboxMaxAttempts: positiveInteger(env.OUTBOX_MAX_ATTEMPTS, "OUTBOX_MAX_ATTEMPTS", 5),
+    outboxRetryBaseMs: positiveInteger(env.OUTBOX_RETRY_BASE_MS, "OUTBOX_RETRY_BASE_MS", 1_000),
+    outboxRetryMaxMs: positiveInteger(env.OUTBOX_RETRY_MAX_MS, "OUTBOX_RETRY_MAX_MS", 60_000),
+    outboxRetryJitterMs: positiveInteger(env.OUTBOX_RETRY_JITTER_MS, "OUTBOX_RETRY_JITTER_MS", 250),
     parkedEventMaxAgeMinutes: positiveInteger(
       env.PARKED_EVENT_MAX_AGE_MINUTES,
       "PARKED_EVENT_MAX_AGE_MINUTES",
