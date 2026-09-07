@@ -28,6 +28,8 @@
     "test:security": "vitest run tests/unit/security.test.ts tests/unit/observability.test.ts tests/unit/safe-error.test.ts tests/integration/observability-trace.test.ts",
     "test:scenarios": "vitest run tests/unit/scenario-campaign.test.ts",
     "test:properties": "vitest run tests/unit/property-sequences.test.ts",
+    "test:scenarios:twice": "tsx scripts/run-scenarios.ts",
+    "release:evidence": "tsx scripts/run-scenarios.ts",
     "security:scan": "tsx scripts/security-scan.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed-demo.ts",
