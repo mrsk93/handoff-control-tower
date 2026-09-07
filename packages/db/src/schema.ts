@@ -347,6 +347,39 @@ export const outboxMessages = pgTable(
   ],
 );
 
+export const outboxDeliveryReceipts = pgTable(
+  "outbox_delivery_receipts",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    outboxId: uuid("outbox_id")
+      .notNull()
+      .references(() => outboxMessages.id),
+    attemptCount: integer("attempt_count").notNull(),
+    remoteReceiptId: text("remote_receipt_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    correlationId: text("correlation_id").notNull(),
+    causationId: text("causation_id"),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull(),
+    duplicate: boolean("duplicate").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("outbox_delivery_receipts_attempt_uq").on(
+      table.tenantId,
+      table.outboxId,
+      table.attemptCount,
+    ),
+    index("outbox_delivery_receipts_tenant_outbox_idx").on(
+      table.tenantId,
+      table.outboxId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const exceptions = pgTable(
   "exceptions",
   {
@@ -394,6 +427,8 @@ export const exceptionCommands = pgTable(
     payload: jsonb("payload").notNull().default({}),
     result: jsonb("result").notNull().default({}),
     actorId: text("actor_id").notNull(),
+    correlationId: text("correlation_id"),
+    causationId: text("causation_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
@@ -552,6 +587,7 @@ export const schema = {
   shipmentLines,
   processInstances,
   outboxMessages,
+  outboxDeliveryReceipts,
   exceptions,
   exceptionCommands,
   exceptionNotes,

@@ -281,6 +281,8 @@ export function createExceptionCommandRepository(db: Database) {
           payload: command,
           result: storedResult,
           actorId: command.actorId,
+          correlationId: command.correlationId ?? command.idempotencyKey,
+          causationId: command.causationId ?? null,
           createdAt: now,
         });
         await writeAudit(

@@ -15,6 +15,15 @@ export type OutboundDelivery = OutboundMessage & {
   attemptCount: number;
 };
 
+export type OutboundDeliveryReceipt = {
+  remoteReceiptId: string;
+  idempotencyKey: string;
+  correlationId: string;
+  causationId?: string;
+  acceptedAt: string;
+  duplicate: boolean;
+};
+
 export type OutboundDeliveryAdapter = {
-  deliver(message: OutboundDelivery): Promise<void>;
+  deliver(message: OutboundDelivery): Promise<void | OutboundDeliveryReceipt>;
 };

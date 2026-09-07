@@ -17,6 +17,7 @@ import {
   orderLines,
   orders,
   outboxMessages,
+  outboxDeliveryReceipts,
   processInstances,
   reconciliationFindings,
   reconciliationRuns,
@@ -380,7 +381,19 @@ export function createOperatorRepository(db: Database) {
         .from(outboxMessages)
         .where(and(eq(outboxMessages.tenantId, scoped.tenantId), eq(outboxMessages.id, messageId)))
         .limit(1);
-      return rows[0] ?? null;
+      const message = rows[0];
+      if (!message) return null;
+      const receipts = await db
+        .select()
+        .from(outboxDeliveryReceipts)
+        .where(
+          and(
+            eq(outboxDeliveryReceipts.tenantId, scoped.tenantId),
+            eq(outboxDeliveryReceipts.outboxId, message.id),
+          ),
+        )
+        .orderBy(asc(outboxDeliveryReceipts.createdAt));
+      return { ...message, deliveryReceipts: receipts };
     },
 
     async listReconciliationRuns(context: TenantContext, limit = 50) {

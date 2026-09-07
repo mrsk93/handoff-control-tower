@@ -1,8 +1,15 @@
 import { and, asc, eq, inArray, isNotNull, lte, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import type { IntegrationEvent, OutboundMessage } from "@handoff/domain";
+import type { IntegrationEvent, OutboundDeliveryReceipt, OutboundMessage } from "@handoff/domain";
 import type { Database } from "./client";
-import { connections, inboxMessages, orders, outboxMessages, tenants } from "./schema";
+import {
+  connections,
+  inboxMessages,
+  orders,
+  outboxDeliveryReceipts,
+  outboxMessages,
+  tenants,
+} from "./schema";
 import { requireTenantContext, type TenantContext } from "./tenant-context";
 import type { Transaction } from "./transaction";
 
@@ -343,6 +350,8 @@ export type OutboxFailure = {
 
 export type OutboxClaim = typeof outboxMessages.$inferSelect;
 
+export type OutboxDeliveryReceipt = typeof outboxDeliveryReceipts.$inferSelect;
+
 async function assertTenantExists(transaction: Transaction, tenantId: string): Promise<void> {
   const rows = await transaction
     .select({ id: tenants.id })
@@ -503,6 +512,62 @@ export function createOutboxRepository(db: Database) {
         )
         .returning();
       return updated[0] ?? null;
+    },
+
+    async recordReceipt(
+      context: TenantContext,
+      messageId: string,
+      workerId: string,
+      receipt: OutboundDeliveryReceipt,
+      createdAt = new Date(),
+    ): Promise<OutboxDeliveryReceipt | null> {
+      const scoped = requireTenantContext(context.tenantId);
+      return db.transaction(async (transaction) => {
+        const rows = await transaction
+          .select()
+          .from(outboxMessages)
+          .where(
+            and(
+              eq(outboxMessages.id, messageId),
+              eq(outboxMessages.tenantId, scoped.tenantId),
+              eq(outboxMessages.status, "dispatching"),
+              eq(outboxMessages.lockedBy, workerId),
+            ),
+          )
+          .limit(1);
+        const message = rows[0];
+        if (!message || message.idempotencyKey !== receipt.idempotencyKey) return null;
+        const inserted = await transaction
+          .insert(outboxDeliveryReceipts)
+          .values({
+            id: randomUUID(),
+            tenantId: scoped.tenantId,
+            outboxId: message.id,
+            attemptCount: message.attemptCount,
+            remoteReceiptId: receipt.remoteReceiptId,
+            idempotencyKey: receipt.idempotencyKey,
+            correlationId: receipt.correlationId,
+            causationId: receipt.causationId ?? null,
+            acceptedAt: new Date(receipt.acceptedAt),
+            duplicate: receipt.duplicate,
+            createdAt,
+          })
+          .onConflictDoNothing()
+          .returning();
+        if (inserted[0]) return inserted[0];
+        const existing = await transaction
+          .select()
+          .from(outboxDeliveryReceipts)
+          .where(
+            and(
+              eq(outboxDeliveryReceipts.tenantId, scoped.tenantId),
+              eq(outboxDeliveryReceipts.outboxId, message.id),
+              eq(outboxDeliveryReceipts.attemptCount, message.attemptCount),
+            ),
+          )
+          .limit(1);
+        return existing[0] ?? null;
+      });
     },
 
     async recordFailure(

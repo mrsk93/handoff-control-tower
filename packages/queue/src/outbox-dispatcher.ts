@@ -1,7 +1,12 @@
 import type { AppConfig } from "@handoff/config";
 import { createOutboxRepository, type Database, type OutboxClaim } from "@handoff/db";
-import type { OutboundDelivery, OutboundDeliveryAdapter } from "@handoff/domain";
+import type {
+  OutboundDelivery,
+  OutboundDeliveryAdapter,
+  OutboundDeliveryReceipt,
+} from "@handoff/domain";
 import type { TenantContext } from "@handoff/db";
+import type { MetricsRegistry, StructuredLogger } from "@handoff/observability";
 
 export type OutboxRetryPolicy = {
   baseDelayMs: number;
@@ -36,6 +41,7 @@ export type OutboxDispatchResult =
       attemptCount: number;
       retryAt?: Date;
       error?: string;
+      remoteReceiptId?: string;
     };
 
 type DispatcherConfig = Pick<
@@ -74,6 +80,8 @@ export function createOutboxDispatcher(dependencies: {
   clock?: () => Date;
   random?: () => number;
   leaseDurationMs?: number;
+  logger?: StructuredLogger;
+  metrics?: MetricsRegistry;
 }) {
   const repository = createOutboxRepository(dependencies.db);
   const clock = dependencies.clock ?? (() => new Date());
@@ -84,6 +92,8 @@ export function createOutboxDispatcher(dependencies: {
     maxDelayMs: dependencies.config.outboxRetryMaxMs,
     jitterMs: dependencies.config.outboxRetryJitterMs,
   };
+  const logger = dependencies.logger;
+  const metrics = dependencies.metrics;
 
   return {
     async dispatchNext(
@@ -95,9 +105,81 @@ export function createOutboxDispatcher(dependencies: {
       if (!claim) return { status: "idle" };
 
       try {
-        await dependencies.adapter.deliver(toDelivery(claim));
+        const receipt = await dependencies.adapter.deliver(toDelivery(claim));
+        let persistedReceipt: OutboundDeliveryReceipt | undefined;
+        if (receipt !== undefined) {
+          persistedReceipt = receipt;
+          await repository.recordReceipt(context, claim.id, workerId, receipt, now);
+        }
+        metrics?.increment("handoff_outbox_deliveries_total", {
+          destination: claim.destination,
+          status: "sent",
+        });
+        logger?.info(
+          "outbox.delivery.sent",
+          {
+            tenantId: claim.tenantId,
+            idempotencyKey: claim.idempotencyKey,
+            correlationId: claim.correlationId,
+            ...(claim.causationId === null ? {} : { causationId: claim.causationId }),
+            outboxId: claim.id,
+            ...(persistedReceipt === undefined
+              ? {}
+              : { remoteReceiptId: persistedReceipt.remoteReceiptId }),
+          },
+          {
+            destination: claim.destination,
+            messageType: claim.messageType,
+            status: "sent",
+            attemptCount: claim.attemptCount,
+            ...(persistedReceipt === undefined
+              ? {}
+              : { remoteDuplicate: persistedReceipt.duplicate }),
+          },
+        );
+        const sent = await repository.recordSent(context, claim.id, workerId, now);
+        if (!sent) {
+          return {
+            status: "lease_lost",
+            messageId: claim.id,
+            attemptCount: claim.attemptCount,
+            ...(persistedReceipt === undefined
+              ? {}
+              : { remoteReceiptId: persistedReceipt.remoteReceiptId }),
+          };
+        }
+        return {
+          status: "sent",
+          messageId: sent.id,
+          attemptCount: sent.attemptCount,
+          ...(persistedReceipt === undefined
+            ? {}
+            : { remoteReceiptId: persistedReceipt.remoteReceiptId }),
+        };
       } catch (error) {
         const message = error instanceof Error ? error.message : "outbox delivery failed";
+        metrics?.increment("handoff_outbox_deliveries_total", {
+          destination: claim.destination,
+          status: "failed",
+          errorClass: error instanceof Error ? error.name : "UnknownError",
+        });
+        logger?.error(
+          "outbox.delivery.failed",
+          {
+            tenantId: claim.tenantId,
+            idempotencyKey: claim.idempotencyKey,
+            correlationId: claim.correlationId,
+            ...(claim.causationId === null ? {} : { causationId: claim.causationId }),
+            outboxId: claim.id,
+          },
+          {
+            destination: claim.destination,
+            messageType: claim.messageType,
+            status: "failed",
+            attemptCount: claim.attemptCount,
+            errorClass: error instanceof Error ? error.name : "UnknownError",
+          },
+        );
         const retryAt = calculateOutboxRetryAt(now, claim.attemptCount, retryPolicy, random());
         const updated = await repository.recordFailure(context, claim.id, workerId, {
           error: message,
@@ -120,16 +202,6 @@ export function createOutboxDispatcher(dependencies: {
           error: message,
         };
       }
-
-      const sent = await repository.recordSent(context, claim.id, workerId, now);
-      if (!sent) {
-        return {
-          status: "lease_lost",
-          messageId: claim.id,
-          attemptCount: claim.attemptCount,
-        };
-      }
-      return { status: "sent", messageId: sent.id, attemptCount: sent.attemptCount };
     },
 
     retryDeadLetter(

@@ -32,6 +32,7 @@ export type IngestionInput = {
 export type IngestionResult = {
   messageId: string;
   inboxId: string;
+  idempotencyKey: string;
   correlationId: string;
   duplicate: boolean;
   stale: boolean;
@@ -104,6 +105,7 @@ export function createInboxIngestionService(dependencies: {
       return {
         messageId: result.message.messageId,
         inboxId: result.message.id,
+        idempotencyKey: result.message.idempotencyKey,
         correlationId: result.message.correlationId,
         duplicate: result.duplicate,
         stale: result.stale,
