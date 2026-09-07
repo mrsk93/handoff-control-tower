@@ -474,6 +474,48 @@ export const reconciliationFindings = pgTable(
   ],
 );
 
+export const reconciliationLeases = pgTable(
+  "reconciliation_leases",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    systemPair: text("system_pair").notNull(),
+    resourceType: text("resource_type").notNull(),
+    lockedBy: text("locked_by").notNull(),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("reconciliation_leases_key_uq").on(
+      table.tenantId,
+      table.systemPair,
+      table.resourceType,
+    ),
+    index("reconciliation_leases_expiry_idx").on(table.lockedUntil),
+  ],
+);
+
+export const reconciliationWatermarks = pgTable(
+  "reconciliation_watermarks",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    systemPair: text("system_pair").notNull(),
+    resourceType: text("resource_type").notNull(),
+    lastWindowEnd: timestamp("last_window_end", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("reconciliation_watermarks_key_uq").on(
+      table.tenantId,
+      table.systemPair,
+      table.resourceType,
+    ),
+  ],
+);
+
 export const auditEvents = pgTable(
   "audit_events",
   {
@@ -515,5 +557,7 @@ export const schema = {
   exceptionNotes,
   reconciliationRuns,
   reconciliationFindings,
+  reconciliationLeases,
+  reconciliationWatermarks,
   auditEvents,
 };
