@@ -62,7 +62,6 @@ describe.skipIf(!testDatabaseUrl)("reconciliation run persistence", () => {
           first.run.id,
           finding[0]!.id,
           "auto_repaired",
-          firstNow,
         )
       )?.repairStatus,
     ).toBe("auto_repaired");

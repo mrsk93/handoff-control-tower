@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { ReconciliationFinding, ReconciliationPair } from "@handoff/domain";
 import type { Database } from "./client";
@@ -110,8 +110,8 @@ export function createReconciliationRepository(db: Database) {
       if (input.overlapMs < 0 || input.leaseDurationMs <= 0) {
         throw new Error("reconciliation overlap and lease duration are invalid");
       }
-      if (input.windowEnd <= input.now)
-        throw new Error("reconciliation window end must be in future");
+      if (input.windowEnd < input.now)
+        throw new Error("reconciliation window end cannot be in the past");
       return db.transaction(async (transaction) => {
         const existingLease = await transaction
           .select()
@@ -251,7 +251,6 @@ export function createReconciliationRepository(db: Database) {
       runId: string,
       findingId: string,
       status: "auto_repaired" | "manual_required" | "ignored",
-      now: Date,
     ): Promise<ReconciliationFindingRow | null> {
       const scoped = requireTenantContext(context.tenantId);
       const rows = await db
