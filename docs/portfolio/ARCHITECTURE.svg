@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Handoff Control Tower ownership and message flow</title>
+  <desc id="desc">Commerce, WMS, carrier, and billing systems connect through inbox, Control Tower state, and outbox. Ownership remains explicit.</desc>
+  <defs>
+    <linearGradient id="tower" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#172554"/>
+      <stop offset="1" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/>
+    </marker>
+    <style>
+      .system { fill: #f8fafc; stroke: #64748b; stroke-width: 2; rx: 14; }
+      .store { fill: #ecfeff; stroke: #0891b2; stroke-width: 2; rx: 14; }
+      .title { font: 700 23px ui-sans-serif, system-ui, sans-serif; fill: #0f172a; }
+      .label { font: 600 17px ui-sans-serif, system-ui, sans-serif; fill: #0f172a; }
+      .small { font: 14px ui-sans-serif, system-ui, sans-serif; fill: #334155; }
+      .light { font: 14px ui-sans-serif, system-ui, sans-serif; fill: #dbeafe; }
+      .flow { stroke: #94a3b8; stroke-width: 3; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 8 7; }
+    </style>
+  </defs>
+  <rect width="1280" height="720" fill="#f1f5f9"/>
+  <text x="48" y="55" class="title">Handoff Control Tower</text>
+  <text x="48" y="82" class="small">Synthetic portfolio architecture · at-least-once delivery · explicit system-of-record ownership</text>
+
+  <rect x="48" y="145" width="220" height="125" class="system"/>
+  <text x="158" y="185" text-anchor="middle" class="label">Commerce mock</text>
+  <text x="158" y="214" text-anchor="middle" class="small">accepted order</text>
+  <text x="158" y="237" text-anchor="middle" class="small">immutable lines</text>
+
+  <rect x="48" y="415" width="220" height="125" class="system"/>
+  <text x="158" y="455" text-anchor="middle" class="label">WMS mock</text>
+  <text x="158" y="484" text-anchor="middle" class="small">fulfillment actuals</text>
+  <text x="158" y="507" text-anchor="middle" class="small">quantity evidence</text>
+
+  <rect x="1012" y="145" width="220" height="125" class="system"/>
+  <text x="1122" y="185" text-anchor="middle" class="label">Carrier mock</text>
+  <text x="1122" y="214" text-anchor="middle" class="small">labels and tracking</text>
+  <text x="1122" y="237" text-anchor="middle" class="small">shipment evidence</text>
+
+  <rect x="1012" y="415" width="220" height="125" class="system"/>
+  <text x="1122" y="455" text-anchor="middle" class="label">Billing mock</text>
+  <text x="1122" y="484" text-anchor="middle" class="small">eligibility events only</text>
+  <text x="1122" y="507" text-anchor="middle" class="small">no invoices</text>
+
+  <rect x="365" y="120" width="550" height="450" rx="22" fill="url(#tower)"/>
+  <text x="640" y="165" text-anchor="middle" class="light" style="font-size:25px;font-weight:700">Control Tower</text>
+  <rect x="405" y="195" width="220" height="90" class="store"/>
+  <text x="515" y="231" text-anchor="middle" class="label">Inbox</text>
+  <text x="515" y="256" text-anchor="middle" class="small">persist before process</text>
+  <rect x="655" y="195" width="220" height="90" class="store"/>
+  <text x="765" y="231" text-anchor="middle" class="label">Canonical state</text>
+  <text x="765" y="256" text-anchor="middle" class="small">order · actual · shipment</text>
+  <rect x="405" y="340" width="220" height="90" class="store"/>
+  <text x="515" y="376" text-anchor="middle" class="label">Exceptions + audit</text>
+  <text x="515" y="401" text-anchor="middle" class="small">evidence and commands</text>
+  <rect x="655" y="340" width="220" height="90" class="store"/>
+  <text x="765" y="376" text-anchor="middle" class="label">Outbox</text>
+  <text x="765" y="401" text-anchor="middle" class="small">same DB transaction</text>
+  <rect x="480" y="475" width="320" height="60" rx="12" fill="#172554" stroke="#93c5fd" stroke-width="2"/>
+  <text x="640" y="511" text-anchor="middle" class="light">derived eligibility · guarded event</text>
+
+  <line x1="268" y1="205" x2="405" y2="235" class="flow"/>
+  <line x1="268" y1="480" x2="405" y2="385" class="flow"/>
+  <line x1="875" y1="235" x2="1012" y2="205" class="flow"/>
+  <line x1="875" y1="385" x2="1012" y2="480" class="flow"/>
+  <line x1="625" y1="285" x2="655" y2="285" class="flow dashed"/>
+  <line x1="765" y1="430" x2="765" y2="475" class="flow dashed"/>
+  <line x1="515" y1="340" x2="515" y2="285" class="flow dashed"/>
+
+  <text x="315" y="185" class="small">signed inbound</text>
+  <text x="310" y="462" class="small">actual evidence</text>
+  <text x="930" y="185" class="small">label request</text>
+  <text x="930" y="462" class="small">readiness event</text>
+  <text x="48" y="650" class="small">Remote I/O occurs after claim commit. Replays use stable idempotency keys; transport is at-least-once.</text>
+</svg>

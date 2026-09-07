@@ -39,3 +39,11 @@ _Avoid_: live sync, full scan
 **Remote delivery receipt**:
 Evidence returned by an external adapter after an outbound message attempt, retained with the stable idempotency, correlation, and causation identifiers.
 _Avoid_: exactly-once confirmation, accounting invoice
+
+**Scenario campaign**:
+A bounded set of named synthetic stories that exercises handoff invariants, failure evidence, and operator outcomes.
+_Avoid_: production proof, customer case study
+
+**Eligibility event**:
+A guarded readiness signal derived by the Control Tower and sent to billing without creating an accounting invoice.
+_Avoid_: invoice, billing transaction

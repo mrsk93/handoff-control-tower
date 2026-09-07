@@ -4,7 +4,7 @@ This repository is a production-style portfolio demonstration of the commerce â†
 
 ## Current milestone
 
-M10 adds synthetic non-production operator role checks, Redis-backed command/ingress/reconciliation rate limits, AES-GCM credential encryption behind a framework-independent cipher interface, durable synthetic remote-delivery receipts, structured allowlisted logs/metrics, safe error correlation IDs, CI dependency/secret scans, and the recovery runbook. M9 adds the tenant-scoped operator read model, named command routes, bounded reconciliation route, and a browser console served at `/`. M8 adds bounded four-pair reconciliation with persisted leases, overlapping watermarks, evidence-backed findings, conservative repair, and synthetic drift fixtures. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. Production vendor integrations remain deferred.
+M11 adds the 15-case synthetic scenario campaign, fixed-seed property-based sequence tests, twice-reset release evidence, the portfolio case study, system-of-record diagram, and fresh-clone rehearsal. M10 adds synthetic non-production operator role checks, Redis-backed command/ingress/reconciliation rate limits, AES-GCM credential encryption behind a framework-independent cipher interface, durable synthetic remote-delivery receipts, structured allowlisted logs/metrics, safe error correlation IDs, CI dependency/secret scans, and the recovery runbook. M9 adds the tenant-scoped operator read model, named command routes, bounded reconciliation route, and a browser console served at `/`. M8 adds bounded four-pair reconciliation with persisted leases, overlapping watermarks, evidence-backed findings, conservative repair, and synthetic drift fixtures. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. Production vendor integrations remain deferred.
 
 ## Local setup
 
@@ -33,6 +33,11 @@ pnpm test:exception-commands
 pnpm test:reconciliation
 pnpm test:operator
 pnpm test:security
+pnpm test:scenarios
+pnpm test:properties
+pnpm test:scenarios:twice
+pnpm release:evidence
+pnpm release:rehearse
 pnpm security:scan
 pnpm start:api
 ```
@@ -70,3 +75,14 @@ It reads the tenant-scoped `/api/*` routes, displays loading/empty/error/stale s
 the simulator as `Demo Simulator`. The console does not connect to PostgreSQL directly. Its
 headers identify a synthetic demo operator and are rejected by the authentication seam in
 production until an external authentication adapter is supplied.
+
+## Scenario campaign and portfolio evidence
+
+The named scenarios in `@handoff/scenarios` exercise the domain seams with synthetic fixtures:
+duplicate and out-of-order delivery, quantity-safe partial fulfillment, cancellation
+compensation, adapter failure recovery, reconciliation, tracking conflict, and tenant isolation.
+Run `pnpm test:scenarios:twice` to execute all 15 fixtures twice from fresh in-memory reset state
+with a fixed seed. The output is intentionally labeled synthetic and uses at-least-once delivery
+language. The release narrative and evidence live in [`docs/portfolio/CASE_STUDY.md`](docs/portfolio/CASE_STUDY.md),
+[`docs/portfolio/SCENARIO_RESULTS.md`](docs/portfolio/SCENARIO_RESULTS.md), and
+[`docs/portfolio/ARCHITECTURE.svg`](docs/portfolio/ARCHITECTURE.svg).

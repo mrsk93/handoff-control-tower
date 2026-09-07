@@ -103,6 +103,16 @@
 - Truthful boundary: all adapters and receipts are deterministic synthetic mocks; no proprietary WMS/API claim, real connector, payment data, or accounting invoice is implemented.
 - Acceptance: security/observability unit tests passed 9 tests; M10 PostgreSQL trace and role tests passed 5 focused tests; `pnpm security:scan` reported zero findings; `pnpm audit --audit-level=high` reported no known vulnerabilities.
 
+## M11 — Scenario campaign and portfolio release
+
+- Status: complete
+- Scenario seam: `@handoff/scenarios` contains all 15 named fixtures with declared initial state, ordered inputs, injected failures, expected state, exception codes, outbox effects, audit actions, and reconciliation findings.
+- Invariants: fixed-seed property-based tests generate valid quantity chains and duplicated/reordered warehouse observations. They assert quantity safety, stable eligibility decisions, and bounded idempotent effects.
+- Release evidence: `pnpm test:scenarios:twice` ran all 15 scenarios twice from fresh reset state with seed `20260907`; both runs passed and produced identical summaries. The command labels all results synthetic and states at-least-once delivery.
+- Portfolio: `docs/portfolio/CASE_STUDY.md` records the problem, flow, ownership, evidence model, exception/reconciliation story, conditional production adaptation, and mock disclosure. `docs/portfolio/ARCHITECTURE.svg` is the system-of-record and message-flow diagram. Browser capture artifacts are recorded under `docs/portfolio/media/`.
+- Fresh-clone rehearsal: `pnpm release:rehearse` clones the current checkout into an isolated temporary directory, installs from the lockfile, and reruns the check, property, and scenario gates.
+- Acceptance: `pnpm check` passed with 99 unit tests; `pnpm test:properties` passed 2 fixed-seed property tests; `pnpm test:scenarios` passed 17 scenario campaign tests; the twice-reset campaign passed all 30 scenario executions.
+
 ## Acceptance evidence
 
 ### Verified environment
@@ -150,6 +160,9 @@
 - `pnpm test:security` with `TEST_DATABASE_URL` — 4 files and 10 tests passed
 - `pnpm security:scan` — 125 tracked files scanned, zero findings
 - `pnpm audit --audit-level=high` — no known vulnerabilities found
+- `pnpm test:properties` — 2 fixed-seed property tests passed
+- `pnpm test:scenarios` — 17 tests passed, including all 15 named scenarios and deterministic campaign replay
+- `pnpm test:scenarios:twice` — 15 scenarios passed on each of 2 fresh reset runs with seed `20260907`
 - live API smoke — liveness `200`, readiness distinguished PostgreSQL/Redis failure and then reported both `ok`, authenticated viewer read succeeded, missing authentication returned `401`, and metrics endpoints returned structured output
 
 The database acceptance commands used `TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/handoff_control_tower_test` because the local temporary cluster exposes the `postgres` role. No real customer, vendor, payment, or accounting data is used.
@@ -172,4 +185,5 @@ The database acceptance commands used `TEST_DATABASE_URL=postgresql://postgres@1
 
 - Docker is still unavailable on the development host; the Compose workflow remains committed but was not executed locally.
 - Native PostgreSQL and Redis are temporary local acceptance services and must be started before integration, readiness, and Redis-backed rate-limit checks.
-- The synthetic operator authentication seam intentionally rejects production requests. An external authentication adapter, deployment hardening, and the scenario campaign remain outside the completed M10 scope and are not silently invented.
+- The synthetic operator authentication seam intentionally rejects production requests. An external authentication adapter and deployment hardening remain outside the completed M10 scope and are not silently invented.
+- Docker remains unavailable on this host, so the fresh-clone rehearsal validates the code, lockfile, and synthetic campaign without claiming a Docker runtime pass. Browser media is captured against the local synthetic console only; it is not vendor or customer evidence.
