@@ -26,7 +26,7 @@ export type ReconciliationRepair =
   | "apply_authoritative_order"
   | "apply_authoritative_fulfillment"
   | "apply_authoritative_shipment"
-  | "redispatch_commerce_fulfillment"
+  | "redeliver_commerce_fulfillment"
   | "review"
   | null;
 
@@ -259,7 +259,7 @@ export function reconcileCommerceFulfillment(
       category: "missing_remote",
       sourceValues: { remoteStatus, localShippedQtyByLine },
       evidence: { orderId },
-      recommendedAction: hasLocalShipment ? "redispatch_commerce_fulfillment" : null,
+      recommendedAction: hasLocalShipment ? "redeliver_commerce_fulfillment" : null,
       autoRepairable: hasLocalShipment,
     });
   }

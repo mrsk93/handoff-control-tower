@@ -71,6 +71,16 @@
 - Recalculation: resolution updates blocking-exception counts and marks the process for deterministic eligibility recomputation; it never forces invoice eligibility true and never creates an accounting invoice.
 - Acceptance: `tests/integration/exception-commands.test.ts` passed 3 PostgreSQL tests, and the command domain seam passed 6 unit tests.
 
+## M8 — Reconciliation
+
+- Status: complete
+- Comparison seam: four tenant-scoped pairs compare commerce orders, warehouse fulfillment actuals, carrier shipments, and commerce fulfillment read-back without merging disputed values.
+- Run control: each pair uses an immutable window, persisted page cursor, overlapping watermark, and PostgreSQL lease. A second active worker cannot run the same tenant pair; repeat runs are safe.
+- Findings: missing-local, missing-remote, quantity, status, tracking, identity, and stale-version differences retain source values, evidence, and a recommended action.
+- Repair policy: only missing-local authoritative records, newer authoritative versions, and missing commerce reflections are eligible for automatic repair. Repairs use the existing inbox/process-manager or stable outbox seam; remote adapter I/O occurs outside database transactions. Quantity, tracking, and identity disagreements remain manual.
+- Truthful boundary: the comparison uses only versioned adapter ports and deterministic in-memory mocks. No real vendor connector or accounting invoice is implemented.
+- Acceptance: `pnpm test:reconciliation` passed 3 PostgreSQL integration tests plus 3 domain unit tests. The suite covered a missing local order repair, pagination, overlapping watermark, lease contention, repeat-run safety, and manual-only drift classification.
+
 ## Acceptance evidence
 
 ### Verified environment
@@ -125,9 +135,10 @@ The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.
 6. `0006_audit_indexes.sql` — append-only audit events and indexes.
 7. `0007_process_manager.sql` — cancellation/exception order states and stable tenant-scoped shipment references.
 8. `0008_exception_commands.sql` — exception row versions, command idempotency records, and append-only notes.
+9. `0009_reconciliation_control.sql` — tenant/system leases, overlapping watermarks, run-window validation, and reconciliation indexes.
 
 ## Known environment risks
 
 - Docker is not installed on the development host; Compose has not been executed locally unless a Docker-compatible runtime is provided.
 - Native PostgreSQL and Redis services must be started before database and readiness acceptance checks; the verified services were isolated temporary processes and are not part of the repository.
-- M7 stops at fulfillment orchestration and named exception commands. Reconciliation, operator query/HTTP/UI surfaces, security hardening, scenario campaign, and production vendor integrations remain intentionally deferred to later milestones.
+- M8 stops at reconciliation execution and persisted findings. Operator query/HTTP/UI surfaces, security hardening, scenario campaign, and production vendor integrations remain intentionally deferred to later milestones.

@@ -108,7 +108,7 @@ describe("reconciliation decision seam", () => {
   it("requests a stable fulfillment redispatch for a missing remote reflection", () => {
     expect(reconcileCommerceFulfillment("order-a", { "line-1": 1 }, "missing", {})).toMatchObject({
       category: "missing_remote",
-      recommendedAction: "redispatch_commerce_fulfillment",
+      recommendedAction: "redeliver_commerce_fulfillment",
       autoRepairable: true,
     });
   });

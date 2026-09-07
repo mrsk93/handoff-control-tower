@@ -4,7 +4,7 @@ This repository is a production-style portfolio demonstration of the commerce â†
 
 ## Current milestone
 
-M7 adds the fulfillment process manager and named exception commands on top of the M0-M5 platform. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. Reconciliation, operator API/UI, and production vendor integrations remain deferred.
+M8 adds bounded four-pair reconciliation with persisted leases, overlapping watermarks, evidence-backed findings, conservative repair, and synthetic drift fixtures. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. The operator API/UI and production vendor integrations remain deferred.
 
 ## Local setup
 
@@ -30,6 +30,7 @@ pnpm test:mock-adapters
 pnpm test:simulator
 pnpm test:fulfillment-process
 pnpm test:exception-commands
+pnpm test:reconciliation
 pnpm start:api
 ```
 

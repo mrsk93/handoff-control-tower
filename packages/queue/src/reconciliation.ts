@@ -289,7 +289,7 @@ export function createReconciliationService(dependencies: {
         now,
       );
     }
-    if (finding.recommendedAction === "redispatch_commerce_fulfillment") {
+    if (finding.recommendedAction === "redeliver_commerce_fulfillment") {
       const order = await data.findOrderById(context, finding.resourceKey);
       if (!order) return false;
       const shipments = await data.listShipmentsForOrder(context, order.orderId);

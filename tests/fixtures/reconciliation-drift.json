@@ -1,0 +1,30 @@
+{
+  "name": "synthetic-reconciliation-drift",
+  "tenant": "northstar-demo",
+  "cases": [
+    {
+      "pair": "commerce_order",
+      "category": "missing_local",
+      "resourceKey": "COM-M8-MISSING-LOCAL",
+      "expectedAction": "apply_authoritative_order"
+    },
+    {
+      "pair": "warehouse_fulfillment",
+      "category": "quantity_mismatch",
+      "resourceKey": "synthetic-order",
+      "expectedAction": "review"
+    },
+    {
+      "pair": "carrier_shipment",
+      "category": "tracking_mismatch",
+      "resourceKey": "SHIP-M8-TRACKING",
+      "expectedAction": "review"
+    },
+    {
+      "pair": "shipment_commerce_fulfillment",
+      "category": "missing_remote",
+      "resourceKey": "synthetic-order",
+      "expectedAction": "redeliver_commerce_fulfillment"
+    }
+  ]
+}
