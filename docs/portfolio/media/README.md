@@ -3,12 +3,11 @@
 The media in this directory is captured from the local synthetic operator console. It is intended
 to make the portfolio story inspectable, not to represent a real customer or vendor deployment.
 
-Expected artifacts:
+Captured artifacts:
 
 - `console-overview.png` — operator overview with seeded synthetic orders and exception counts.
 - `console-overview.webm` — short browser recording of the same console loading and refreshing.
-- `control-tower-flow.svg` — copied from the checked-in architecture diagram when a single-folder
-  media bundle is needed.
+- [`../ARCHITECTURE.svg`](../ARCHITECTURE.svg) — checked-in ownership and message-flow diagram.
 
 Capture requirements:
 
