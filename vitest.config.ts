@@ -9,6 +9,8 @@ export default defineConfig({
       "@handoff/domain": resolve(__dirname, "packages/domain/src/index.ts"),
       "@handoff/adapters": resolve(__dirname, "packages/adapters/src/index.ts"),
       "@handoff/queue": resolve(__dirname, "packages/queue/src/index.ts"),
+      "@handoff/observability": resolve(__dirname, "packages/observability/src/index.ts"),
+      "@handoff/security": resolve(__dirname, "packages/security/src/index.ts"),
     },
   },
   test: {

@@ -4,6 +4,8 @@
   "private": true,
   "type": "commonjs",
   "dependencies": {
-    "@handoff/domain": "workspace:*"
+    "@handoff/domain": "workspace:*",
+    "@handoff/security": "workspace:*",
+    "ioredis": "^5.6.1"
   }
 }

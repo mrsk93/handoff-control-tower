@@ -21,8 +21,8 @@ importers:
         specifier: ^16.5.0
         version: 16.6.1
       drizzle-orm:
-        specifier: ^0.44.5
-        version: 0.44.7(@types/pg@8.23.1)(pg@8.23.0)
+        specifier: ^0.45.2
+        version: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
       ioredis:
         specifier: ^5.6.1
         version: 5.11.1
@@ -75,9 +75,15 @@ importers:
       '@handoff/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@handoff/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@handoff/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@handoff/security':
+        specifier: workspace:*
+        version: link:../../packages/security
 
   apps/worker:
     dependencies:
@@ -90,6 +96,12 @@ importers:
       '@handoff/domain':
         specifier: workspace:*
         version: link:../domain
+      '@handoff/security':
+        specifier: workspace:*
+        version: link:../security
+      ioredis:
+        specifier: ^5.6.1
+        version: 5.11.1
 
   packages/config: {}
 
@@ -99,8 +111,8 @@ importers:
         specifier: workspace:*
         version: link:../config
       drizzle-orm:
-        specifier: ^0.44.5
-        version: 0.44.7(@types/pg@8.23.1)(pg@8.23.0)
+        specifier: ^0.45.2
+        version: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
       pg:
         specifier: ^8.16.3
         version: 8.23.0
@@ -123,6 +135,11 @@ importers:
       '@handoff/domain':
         specifier: workspace:*
         version: link:../domain
+      '@handoff/observability':
+        specifier: workspace:*
+        version: link:../observability
+
+  packages/security: {}
 
   packages/shared-testkit: {}
 
@@ -812,8 +829,8 @@ packages:
     resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
     engines: {node: '>=12'}
 
-  drizzle-orm@0.44.7:
-    resolution: {integrity: sha512-quIpnYznjU9lHshEOAYLoZ9s3jweleHlZIAWR/jX9gAWNg/JhQ1wj0KGRf7/Zm+obRrYd9GjPVJg790QY9N5AQ==}
+  drizzle-orm@0.45.2:
+    resolution: {integrity: sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=4'
@@ -2282,7 +2299,7 @@ snapshots:
 
   dotenv@16.6.1: {}
 
-  drizzle-orm@0.44.7(@types/pg@8.23.1)(pg@8.23.0):
+  drizzle-orm@0.45.2(@types/pg@8.23.1)(pg@8.23.0):
     optionalDependencies:
       '@types/pg': 8.23.1
       pg: 8.23.0
