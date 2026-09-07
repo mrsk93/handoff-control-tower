@@ -22,7 +22,8 @@
       "@handoff/adapters": ["packages/adapters/src/index.ts"],
       "@handoff/queue": ["packages/queue/src/index.ts"],
       "@handoff/observability": ["packages/observability/src/index.ts"],
-      "@handoff/security": ["packages/security/src/index.ts"]
+      "@handoff/security": ["packages/security/src/index.ts"],
+      "@handoff/scenarios": ["packages/scenarios/src/index.ts"]
     },
     "outDir": "dist"
   },

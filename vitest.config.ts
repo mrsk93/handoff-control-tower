@@ -11,6 +11,7 @@ export default defineConfig({
       "@handoff/queue": resolve(__dirname, "packages/queue/src/index.ts"),
       "@handoff/observability": resolve(__dirname, "packages/observability/src/index.ts"),
       "@handoff/security": resolve(__dirname, "packages/security/src/index.ts"),
+      "@handoff/scenarios": resolve(__dirname, "packages/scenarios/src/index.ts"),
     },
   },
   test: {

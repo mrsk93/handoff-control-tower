@@ -1,0 +1,10 @@
+{
+  "name": "@handoff/scenarios",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "@handoff/adapters": "workspace:*",
+    "@handoff/domain": "workspace:*"
+  }
+}
