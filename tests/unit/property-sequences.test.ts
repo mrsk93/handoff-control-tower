@@ -82,17 +82,27 @@ describe("M11 property-based sequence invariants", () => {
   it("is stable under duplicated and reordered monotonic warehouse observations", () => {
     fc.assert(
       fc.property(
-        fc.array(fc.integer({ min: 0, max: 8 }), { minLength: 1, maxLength: 12 }),
+        fc.array(
+          fc.record({
+            pickedQty: fc.integer({ min: 0, max: 8 }),
+            orderKey: fc.integer(),
+          }),
+          { minLength: 1, maxLength: 12 },
+        ),
         (observations) => {
           const order = orderFor(8);
           let fulfillment = initialFulfillment(order);
+          const effects = new Set<string>();
           const events = observations
-            .map((pickedQty, index) => ({
-              pickedQty: Math.min(8, pickedQty),
+            .map((observation, index) => ({
+              pickedQty: Math.min(8, observation.pickedQty),
               sourceVersion: String(index + 1),
+              orderKey: observation.orderKey,
             }))
-            .flatMap((event) => [event, event]);
+            .flatMap((event) => [event, { ...event }])
+            .sort((left, right) => left.orderKey - right.orderKey);
           for (const event of events) {
+            effects.add("warehouse.update:" + event.sourceVersion);
             const next = applyWarehouseUpdate(
               order,
               fulfillment,
@@ -115,6 +125,7 @@ describe("M11 property-based sequence invariants", () => {
           }
           expect(fulfillment.lines[0]!.pickedQty).toBeGreaterThanOrEqual(0);
           expect(fulfillment.lines[0]!.pickedQty).toBeLessThanOrEqual(8);
+          expect(effects.size).toBeLessThanOrEqual(observations.length);
         },
       ),
       { seed: 20260907, numRuns: 100 },
