@@ -27,3 +27,11 @@ _Avoid_: generic resolve, bypass
 **Invoice eligibility**:
 A derived Control Tower decision that may be emitted to billing as readiness evidence; it does not create an accounting invoice.
 _Avoid_: invoice, billing transaction
+
+**Reconciliation finding**:
+A tenant-scoped, evidence-backed description of a difference between an authoritative external record and the canonical record. It names a category and recommended action without silently choosing a disputed value.
+_Avoid_: sync error, drift ticket
+
+**Reconciliation run**:
+A bounded, repeatable comparison over an immutable time window with a persisted cursor and tenant/system lease.
+_Avoid_: live sync, full scan

@@ -7,6 +7,7 @@ export * from "./integration-events";
 export * from "./invoice-eligibility";
 export * from "./outbox";
 export * from "./quantities";
+export * from "./reconciliation";
 export * from "./schemas";
 export * from "./state-machines";
 export * from "./types";
