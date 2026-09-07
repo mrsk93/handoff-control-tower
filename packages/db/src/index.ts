@@ -4,6 +4,7 @@ export * from "./migrations";
 export * from "./repositories";
 export * from "./reconciliation-repository";
 export * from "./reconciliation-data-repository";
+export * from "./operator-repository";
 export * from "./schema";
 export * from "./seed";
 export * from "./tenant-context";
