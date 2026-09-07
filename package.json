@@ -30,6 +30,7 @@
     "test:properties": "vitest run tests/unit/property-sequences.test.ts",
     "test:scenarios:twice": "tsx scripts/run-scenarios.ts",
     "release:evidence": "tsx scripts/run-scenarios.ts",
+    "release:rehearse": "bash scripts/rehearse-release.sh",
     "security:scan": "tsx scripts/security-scan.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed-demo.ts",
