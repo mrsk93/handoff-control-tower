@@ -23,9 +23,12 @@ describe("simulator control seam", () => {
       failures: { "commerce.get_order": 1 },
     };
 
-    expect(controller.setScenario(scenario)).toEqual({ enabled: true, scenario });
-    expect(controller.getScenario()).toEqual({ enabled: true, scenario });
-    expect(controller.resetScenario()).toMatchObject({
+    expect(controller.setScenario(scenario, "operator-m5", "admin")).toEqual({
+      enabled: true,
+      scenario,
+    });
+    expect(controller.getScenario("operator-m5", "admin")).toEqual({ enabled: true, scenario });
+    expect(controller.resetScenario("operator-m5", "admin")).toMatchObject({
       enabled: true,
       scenario: { seed: 1, failureRate: 0, delayMs: 0 },
     });
@@ -46,7 +49,7 @@ describe("simulator control seam", () => {
       suite,
     );
     try {
-      controller.getScenario();
+      controller.getScenario("operator-m5", "admin");
     } catch (error) {
       expect(error).toBeInstanceOf(HttpException);
       expect((error as HttpException).getStatus()).toBe(404);

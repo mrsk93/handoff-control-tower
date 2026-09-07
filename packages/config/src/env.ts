@@ -21,6 +21,13 @@ export type AppConfig = {
   allowPartialInvoiceEligibility: boolean;
   enableDemoSimulator: boolean;
   ingestMaxBodyBytes: number;
+  credentialEncryptionSecret: string;
+  rateLimits: {
+    ingestionPerMinute: number;
+    commandPerMinute: number;
+    retryPerMinute: number;
+    reconciliationPerMinute: number;
+  };
   mockWebhookSecrets: MockWebhookSecrets;
 };
 
@@ -137,6 +144,34 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
       "INGEST_MAX_BODY_BYTES",
       1_048_576,
     ),
+    credentialEncryptionSecret: secretValue(
+      env,
+      "CREDENTIAL_ENCRYPTION_SECRET",
+      "local-credential-encryption-secret",
+      appEnv,
+    ),
+    rateLimits: {
+      ingestionPerMinute: positiveInteger(
+        env.INGEST_RATE_LIMIT_PER_MINUTE,
+        "INGEST_RATE_LIMIT_PER_MINUTE",
+        60,
+      ),
+      commandPerMinute: positiveInteger(
+        env.COMMAND_RATE_LIMIT_PER_MINUTE,
+        "COMMAND_RATE_LIMIT_PER_MINUTE",
+        30,
+      ),
+      retryPerMinute: positiveInteger(
+        env.RETRY_RATE_LIMIT_PER_MINUTE,
+        "RETRY_RATE_LIMIT_PER_MINUTE",
+        10,
+      ),
+      reconciliationPerMinute: positiveInteger(
+        env.RECONCILIATION_RATE_LIMIT_PER_MINUTE,
+        "RECONCILIATION_RATE_LIMIT_PER_MINUTE",
+        5,
+      ),
+    },
     mockWebhookSecrets: {
       commerce: secretValue(env, "MOCK_COMMERCE_WEBHOOK_SECRET", "local-commerce-secret", appEnv),
       wms: secretValue(env, "MOCK_WMS_WEBHOOK_SECRET", "local-wms-secret", appEnv),

@@ -72,7 +72,7 @@ export const operatorConsoleHtml = `<!doctype html>
       const error = document.getElementById('error');
       const stale = document.getElementById('stale');
       const state = { refreshedAt: 0 };
-      const headers = () => ({ 'x-tenant-id': tenant.value.trim() });
+      const headers = () => ({ 'x-tenant-id': tenant.value.trim(), 'x-operator-id': 'synthetic-demo-operator', 'x-operator-role': 'admin' });
       async function request(path, options = {}) {
         const response = await fetch(path, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
         const body = await response.json().catch(() => ({}));

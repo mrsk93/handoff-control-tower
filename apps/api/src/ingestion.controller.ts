@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Optional,
   Param,
   Post,
   Req,
@@ -17,7 +18,10 @@ import {
 import { Inject } from "@nestjs/common";
 import type { DatabaseHandle } from "@handoff/db";
 import type { AppConfig } from "@handoff/config";
-import { APP_CONFIG, DATABASE_HANDLE } from "./tokens";
+import type { MetricsRegistry, StructuredLogger } from "@handoff/observability";
+import { FixedWindowRateLimiter } from "@handoff/security";
+import { enforceRateLimit, createLocalRateLimiter } from "./security";
+import { APP_CONFIG, DATABASE_HANDLE, LOGGER, METRICS, RATE_LIMITER } from "./tokens";
 
 type RawInboundRequest = {
   rawBody?: Buffer;
@@ -41,10 +45,20 @@ export class IngestionController {
   constructor(
     @Inject(APP_CONFIG) config: AppConfig,
     @Inject(DATABASE_HANDLE) database: DatabaseHandle,
+    @Optional() @Inject(RATE_LIMITER) rateLimiter?: FixedWindowRateLimiter,
+    @Optional() @Inject(LOGGER) logger?: StructuredLogger,
+    @Optional() @Inject(METRICS) metrics?: MetricsRegistry,
   ) {
     this.appEnv = config.appEnv;
+    this.rateLimiter = rateLimiter ?? createLocalRateLimiter(config);
+    this.logger = logger;
+    this.metrics = metrics;
     this.ingestion = createInboxIngestionService({ config, db: database.db });
   }
+
+  private readonly rateLimiter: FixedWindowRateLimiter;
+  private readonly logger: StructuredLogger | undefined;
+  private readonly metrics: MetricsRegistry | undefined;
 
   @Post(":source/events")
   @HttpCode(HttpStatus.ACCEPTED)
@@ -64,13 +78,48 @@ export class IngestionController {
     if (!request.rawBody) throw new BadRequestException("raw request body is required");
 
     try {
-      return await this.ingestion.accept({
+      const now = new Date();
+      await enforceRateLimit(this.rateLimiter, `${tenantId}:${source}`, "ingestion", now);
+      const result = await this.ingestion.accept({
         source,
         tenantId,
         rawBody: request.rawBody,
         ...(signatureHeader === undefined ? {} : { signatureHeader }),
+        now,
       });
+      this.metrics?.increment("handoff_inbound_messages_total", {
+        system: source,
+        status: result.status,
+      });
+      this.logger?.info(
+        "inbox.message.accepted",
+        {
+          tenantId,
+          messageId: result.messageId,
+          idempotencyKey: result.idempotencyKey,
+          correlationId: result.correlationId,
+        },
+        {
+          sourceSystem: source,
+          status: result.status,
+          outcome: result.duplicate ? "duplicate" : "accepted",
+        },
+      );
+      return result;
     } catch (error) {
+      this.metrics?.increment("handoff_inbound_messages_total", {
+        system: source,
+        status: "rejected",
+      });
+      this.logger?.error(
+        "inbox.message.rejected",
+        { tenantId },
+        {
+          sourceSystem: source,
+          status: "rejected",
+          errorClass: error instanceof Error ? error.name : "UnknownError",
+        },
+      );
       if (error instanceof IngestionRejectedError) throw httpError(error);
       if (error instanceof Error && error.message === "tenant does not exist") {
         throw new BadRequestException("tenant context is unknown");

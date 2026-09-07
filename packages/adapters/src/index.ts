@@ -12,4 +12,5 @@ export * from "./mock-ingress";
 export * from "./mock-outbound";
 export * from "./mock-runtime";
 export * from "./mock-suite";
+export * from "./redis-rate-limit-store";
 export * from "./mock-warehouse";

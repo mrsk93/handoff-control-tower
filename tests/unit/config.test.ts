@@ -31,4 +31,13 @@ describe("configuration", () => {
       "DATABASE_URL must use postgres: or postgresql:",
     );
   });
+
+  it("requires a sufficiently strong credential encryption secret", () => {
+    expect(() => parseConfig({ ...baseEnv, CREDENTIAL_ENCRYPTION_SECRET: "too-short" })).toThrow(
+      "CREDENTIAL_ENCRYPTION_SECRET must be at least 16 characters",
+    );
+    expect(parseConfig(baseEnv).credentialEncryptionSecret).toBe(
+      "local-credential-encryption-secret",
+    );
+  });
 });

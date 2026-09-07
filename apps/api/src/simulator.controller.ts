@@ -6,6 +6,7 @@ import {
   HttpException,
   HttpStatus,
   Inject,
+  Headers,
   Post,
   Put,
 } from "@nestjs/common";
@@ -17,6 +18,7 @@ import {
   type MockScenario,
 } from "@handoff/adapters";
 import { APP_CONFIG, MOCK_ADAPTER_SUITE } from "./tokens";
+import { authenticateOperator, authorizeOperator } from "./security";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -91,29 +93,41 @@ export class SimulatorController {
     @Inject(MOCK_ADAPTER_SUITE) private readonly suite: MockAdapterSuite,
   ) {}
 
-  private assertEnabled(): void {
+  private assertEnabled(operatorId: string | undefined, role: string | undefined): void {
     if (this.config.appEnv === "production" || !this.config.enableDemoSimulator) {
       throw new HttpException({ error: "DEMO_SIMULATOR_DISABLED" }, HttpStatus.NOT_FOUND);
     }
+    const principal = authenticateOperator(this.config, "demo-simulator", operatorId, role);
+    authorizeOperator(principal, "simulator");
   }
 
   @Get("scenario")
-  getScenario() {
-    this.assertEnabled();
+  getScenario(
+    @Headers("x-operator-id") operatorId?: string,
+    @Headers("x-operator-role") role?: string,
+  ) {
+    this.assertEnabled(operatorId, role);
     return { enabled: true, scenario: this.suite.scenario.snapshot() };
   }
 
   @Put("scenario")
   @HttpCode(HttpStatus.OK)
-  setScenario(@Body() input: unknown) {
-    this.assertEnabled();
+  setScenario(
+    @Body() input: unknown,
+    @Headers("x-operator-id") operatorId?: string,
+    @Headers("x-operator-role") role?: string,
+  ) {
+    this.assertEnabled(operatorId, role);
     return { enabled: true, scenario: this.suite.scenario.setScenario(parseScenario(input)) };
   }
 
   @Post("scenario/reset")
   @HttpCode(HttpStatus.OK)
-  resetScenario() {
-    this.assertEnabled();
+  resetScenario(
+    @Headers("x-operator-id") operatorId?: string,
+    @Headers("x-operator-role") role?: string,
+  ) {
+    this.assertEnabled(operatorId, role);
     return { enabled: true, scenario: this.suite.scenario.reset() };
   }
 }
