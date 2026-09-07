@@ -260,8 +260,13 @@ export function createOperatorRepository(db: Database) {
           sql`(${orders.orderNumber} ilike ${query} or ${orders.sourceOrderId} ilike ${query})`,
         );
       }
-      if (filters.eligible !== undefined)
-        conditions.push(eq(processInstances.invoiceEligible, filters.eligible));
+      if (filters.eligible !== undefined) {
+        conditions.push(
+          filters.eligible
+            ? eq(processInstances.invoiceEligible, true)
+            : sql`(${processInstances.invoiceEligible} = false or ${processInstances.id} is null)`,
+        );
+      }
       const limit = boundedLimit(filters.limit);
       const rows = await db
         .select({

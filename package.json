@@ -19,6 +19,7 @@
     "test:fulfillment-process": "vitest run tests/unit/fulfillment-process.test.ts tests/integration/fulfillment-process-manager.test.ts",
     "test:exception-commands": "vitest run tests/unit/exception-commands.test.ts tests/integration/exception-commands.test.ts",
     "test:reconciliation": "vitest run tests/unit/reconciliation.test.ts tests/integration/reconciliation-repository.test.ts tests/integration/reconciliation.test.ts",
+    "test:operator": "vitest run tests/unit/console.test.ts tests/integration/operator-repository.test.ts tests/integration/operator-api.test.ts",
     "test:simulator": "vitest run tests/unit/simulator-control.test.ts",
     "test:tenant-isolation": "vitest run tests/integration/tenant-isolation.test.ts",
     "test:migration-from-zero": "vitest run tests/integration/migration-from-zero.test.ts",

@@ -4,7 +4,7 @@ This repository is a production-style portfolio demonstration of the commerce â†
 
 ## Current milestone
 
-M8 adds bounded four-pair reconciliation with persisted leases, overlapping watermarks, evidence-backed findings, conservative repair, and synthetic drift fixtures. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. The operator API/UI and production vendor integrations remain deferred.
+M9 adds the tenant-scoped operator read model, named command routes, bounded reconciliation route, and a browser console served at `/`. M8 adds bounded four-pair reconciliation with persisted leases, overlapping watermarks, evidence-backed findings, conservative repair, and synthetic drift fixtures. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. Production vendor integrations remain deferred.
 
 ## Local setup
 
@@ -31,6 +31,7 @@ pnpm test:simulator
 pnpm test:fulfillment-process
 pnpm test:exception-commands
 pnpm test:reconciliation
+pnpm test:operator
 pnpm start:api
 ```
 
@@ -59,3 +60,10 @@ The scenario body contains a non-negative `seed`, a `failureRate` from `0` to `1
 ## Truthful integration boundary
 
 The repository contains no proprietary WMS, carrier, commerce, or accounting connector. Future integrations must implement versioned adapter interfaces using official vendor documentation and authorized credentials. Mock adapters must never be presented as real vendor systems.
+
+## Operator console
+
+In development/test, `pnpm start:api` serves the synthetic operator console at `http://localhost:3000/`.
+It reads the tenant-scoped `/api/*` routes, displays loading/empty/error/stale states, and labels
+the simulator as `Demo Simulator`. The console does not connect to PostgreSQL directly; production
+authentication and role enforcement remain part of the security milestone.

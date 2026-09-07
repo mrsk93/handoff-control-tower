@@ -1,3 +1,5 @@
 # Operator console
 
-The Next.js operator console is intentionally deferred to M9. This directory reserves the application seam without introducing UI dependencies during M0/M1.
+The M9 operator console is the framework-light browser surface in `src/operator-console.ts`.
+The API serves the same synthetic console at `/` for local demonstration; it reads only the
+tenant-scoped operator routes and never connects to PostgreSQL directly.

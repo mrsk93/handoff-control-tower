@@ -7,10 +7,18 @@ import { HealthController } from "./health.controller";
 import { HealthService } from "./health.service";
 import { IngestionController } from "./ingestion.controller";
 import { SimulatorController } from "./simulator.controller";
+import { OperatorController } from "./operator.controller";
+import { ConsoleController } from "./console.controller";
 import { APP_CONFIG, DATABASE_HANDLE, MOCK_ADAPTER_SUITE, REDIS_CLIENT } from "./tokens";
 
 @Module({
-  controllers: [HealthController, IngestionController, SimulatorController],
+  controllers: [
+    HealthController,
+    IngestionController,
+    SimulatorController,
+    OperatorController,
+    ConsoleController,
+  ],
   providers: [HealthService],
 })
 export class AppModule {
@@ -27,7 +35,13 @@ export class AppModule {
         { provide: MOCK_ADAPTER_SUITE, useValue: mockAdapters },
         HealthService,
       ],
-      controllers: [HealthController, IngestionController, SimulatorController],
+      controllers: [
+        HealthController,
+        IngestionController,
+        SimulatorController,
+        OperatorController,
+        ConsoleController,
+      ],
       exports: [HealthService],
     };
   }

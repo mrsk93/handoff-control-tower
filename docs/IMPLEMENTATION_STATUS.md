@@ -81,6 +81,16 @@
 - Truthful boundary: the comparison uses only versioned adapter ports and deterministic in-memory mocks. No real vendor connector or accounting invoice is implemented.
 - Acceptance: `pnpm test:reconciliation` passed 3 PostgreSQL integration tests plus 3 domain unit tests. The suite covered a missing local order repair, pagination, overlapping watermark, lease contention, repeat-run safety, and manual-only drift classification.
 
+## M9 — Operator API and UI
+
+- Status: complete
+- Read model: tenant-scoped overview, cursor-paginated order list, order detail with quantities/shipments/eligibility/timeline, exception queue/detail with notes/commands/audit, outbox attempts, and reconciliation run/findings queries.
+- Commands: assignment, notes, short-shipment resolution, dead-letter retry through its linked named command, and policy recomputation require tenant context, operator identity, idempotency key, and optimistic version where applicable. Conflicts return safe `409` responses; unknown tenant-owned resources return `404`.
+- Reconciliation route: `POST /api/reconciliation-runs` starts a bounded run through the M8 service. It does not accept a tenant from the body and never exposes database credentials or remote adapter internals.
+- Browser surface: `/` renders the synthetic operator console with overview metrics, orders, exception queue, reconciliation history, loading/empty/error/stale states, and an explicitly labeled development-only `Demo Simulator` control.
+- Truthful boundary: the console and routes use only synthetic data and existing mock seams. Authentication, roles, rate limits, redaction, and production deployment hardening remain in M10.
+- Acceptance: `pnpm test:operator` passed 2 PostgreSQL operator read-model tests, 2 PostgreSQL API-seam tests, and 1 console contract test.
+
 ## Acceptance evidence
 
 ### Verified environment
@@ -141,4 +151,4 @@ The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.
 
 - Docker is not installed on the development host; Compose has not been executed locally unless a Docker-compatible runtime is provided.
 - Native PostgreSQL and Redis services must be started before database and readiness acceptance checks; the verified services were isolated temporary processes and are not part of the repository.
-- M8 stops at reconciliation execution and persisted findings. Operator query/HTTP/UI surfaces, security hardening, scenario campaign, and production vendor integrations remain intentionally deferred to later milestones.
+- M9 stops at the operator API/UI and bounded reconciliation route. Security hardening, scenario campaign, and production vendor integrations remain intentionally deferred to later milestones.
