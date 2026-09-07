@@ -35,3 +35,7 @@ _Avoid_: sync error, drift ticket
 **Reconciliation run**:
 A bounded, repeatable comparison over an immutable time window with a persisted cursor and tenant/system lease.
 _Avoid_: live sync, full scan
+
+**Remote delivery receipt**:
+Evidence returned by an external adapter after an outbound message attempt, retained with the stable idempotency, correlation, and causation identifiers.
+_Avoid_: exactly-once confirmation, accounting invoice

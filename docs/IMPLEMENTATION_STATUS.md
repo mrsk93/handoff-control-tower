@@ -88,8 +88,20 @@
 - Commands: assignment, notes, short-shipment resolution, dead-letter retry through its linked named command, and policy recomputation require tenant context, operator identity, idempotency key, and optimistic version where applicable. Conflicts return safe `409` responses; unknown tenant-owned resources return `404`.
 - Reconciliation route: `POST /api/reconciliation-runs` starts a bounded run through the M8 service. It does not accept a tenant from the body and never exposes database credentials or remote adapter internals.
 - Browser surface: `/` renders the synthetic operator console with overview metrics, orders, exception queue, reconciliation history, loading/empty/error/stale states, and an explicitly labeled development-only `Demo Simulator` control.
-- Truthful boundary: the console and routes use only synthetic data and existing mock seams. Authentication, roles, rate limits, redaction, and production deployment hardening remain in M10.
+- Truthful boundary: the console and routes use only synthetic data and existing mock seams. M10 adds the non-production authentication seam, role checks, rate limits, redaction, and deployment evidence around this surface.
 - Acceptance: `pnpm test:operator` passed 2 PostgreSQL operator read-model tests, 2 PostgreSQL API-seam tests, and 1 console contract test.
+
+## M10 — Security, observability and runbook
+
+- Status: complete
+- Authentication seam: operator routes derive tenant context from a non-production synthetic principal, enforce viewer/operator/admin permissions, and reject synthetic authentication in production until an external authentication adapter is supplied. The browser console labels its identity as synthetic.
+- Rate limits: ingress, named commands, dead-letter retry, and bounded reconciliation use fixed-window limits. Runtime requests use a Redis adapter; direct deterministic tests use an in-memory adapter. Limits are tenant/operator scoped and return safe `429` responses.
+- Credential protection: AES-256-GCM credentials are behind a framework-independent `CredentialCipher` interface with tenant/system associated data. The application provider derives its key from `CREDENTIAL_ENCRYPTION_SECRET`; no plaintext credentials are seeded or returned.
+- Observability: structured logs use an allowlist for identifiers and bounded fields; metrics expose JSON and Prometheus-style snapshots without identifier labels. Safe HTTP errors return a stable code and correlation ID. Outbox dispatch persists synthetic remote receipts after remote I/O and before the sent-state update.
+- Identifier chain: inbox message, command/audit, outbox, and remote receipt retain stable tenant, idempotency, correlation, and causation references. The chain remains at-least-once and never claims exactly once.
+- Operations: `docs/RUNBOOK.md` documents health checks, dead-letter recovery, reconciliation drift, access controls, reset safety, and the billing boundary. `.github/workflows/ci.yml` runs strict checks, integration tests, secret scanning, and dependency auditing.
+- Truthful boundary: all adapters and receipts are deterministic synthetic mocks; no proprietary WMS/API claim, real connector, payment data, or accounting invoice is implemented.
+- Acceptance: security/observability unit tests passed 9 tests; M10 PostgreSQL trace and role tests passed 5 focused tests; `pnpm security:scan` reported zero findings; `pnpm audit --audit-level=high` reported no known vulnerabilities.
 
 ## Acceptance evidence
 
@@ -132,8 +144,15 @@
 - `pnpm vitest run tests/integration/exception-commands.test.ts` — 3 PostgreSQL exception-command tests passed
 - `pnpm vitest run tests/unit/fulfillment-process.test.ts tests/unit/exception-commands.test.ts` — 11 domain workflow/command tests passed
 - `pnpm typecheck` and `pnpm lint` after M6/M7 changes — passed
+- `pnpm install --frozen-lockfile` after M10 changes — lockfile accepted; Drizzle ORM resolved to patched `0.45.2`
+- `pnpm check` after M10 changes — lint, format, strict typecheck, and 80 unit tests passed
+- `pnpm test:integration` after M10 changes — 12 PostgreSQL integration files and 34 tests passed
+- `pnpm test:security` with `TEST_DATABASE_URL` — 4 files and 10 tests passed
+- `pnpm security:scan` — 125 tracked files scanned, zero findings
+- `pnpm audit --audit-level=high` — no known vulnerabilities found
+- live API smoke — liveness `200`, readiness distinguished PostgreSQL/Redis failure and then reported both `ok`, authenticated viewer read succeeded, missing authentication returned `401`, and metrics endpoints returned structured output
 
-The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.0.1:55432/handoff_control_tower_test`. No real customer, vendor, payment, or accounting data is used.
+The database acceptance commands used `TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/handoff_control_tower_test` because the local temporary cluster exposes the `postgres` role. No real customer, vendor, payment, or accounting data is used.
 
 ### Migration list
 
@@ -146,9 +165,11 @@ The database acceptance commands used `TEST_DATABASE_URL=postgresql://app@127.0.
 7. `0007_process_manager.sql` — cancellation/exception order states and stable tenant-scoped shipment references.
 8. `0008_exception_commands.sql` — exception row versions, command idempotency records, and append-only notes.
 9. `0009_reconciliation_control.sql` — tenant/system leases, overlapping watermarks, run-window validation, and reconciliation indexes.
+10. `0010_delivery_receipts.sql` — tenant-scoped outbound delivery receipts linked to outbox attempts.
+11. `0011_command_trace_ids.sql` — exception-command correlation and causation identifiers.
 
 ## Known environment risks
 
-- Docker is not installed on the development host; Compose has not been executed locally unless a Docker-compatible runtime is provided.
-- Native PostgreSQL and Redis services must be started before database and readiness acceptance checks; the verified services were isolated temporary processes and are not part of the repository.
-- M9 stops at the operator API/UI and bounded reconciliation route. Security hardening, scenario campaign, and production vendor integrations remain intentionally deferred to later milestones.
+- Docker is still unavailable on the development host; the Compose workflow remains committed but was not executed locally.
+- Native PostgreSQL and Redis are temporary local acceptance services and must be started before integration, readiness, and Redis-backed rate-limit checks.
+- The synthetic operator authentication seam intentionally rejects production requests. An external authentication adapter, deployment hardening, and the scenario campaign remain outside the completed M10 scope and are not silently invented.

@@ -4,7 +4,7 @@ This repository is a production-style portfolio demonstration of the commerce â†
 
 ## Current milestone
 
-M9 adds the tenant-scoped operator read model, named command routes, bounded reconciliation route, and a browser console served at `/`. M8 adds bounded four-pair reconciliation with persisted leases, overlapping watermarks, evidence-backed findings, conservative repair, and synthetic drift fixtures. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. Production vendor integrations remain deferred.
+M10 adds synthetic non-production operator role checks, Redis-backed command/ingress/reconciliation rate limits, AES-GCM credential encryption behind a framework-independent cipher interface, durable synthetic remote-delivery receipts, structured allowlisted logs/metrics, safe error correlation IDs, CI dependency/secret scans, and the recovery runbook. M9 adds the tenant-scoped operator read model, named command routes, bounded reconciliation route, and a browser console served at `/`. M8 adds bounded four-pair reconciliation with persisted leases, overlapping watermarks, evidence-backed findings, conservative repair, and synthetic drift fixtures. M6 covers release, warehouse actuals, partial shipment, cancellation compensation, parked-message wake-up, shipment sync, and guarded eligibility propagation. M7 adds tenant-scoped assignment, notes, SKU mapping, short-shipment resolution, dead-letter retry, optimistic concurrency, idempotent command replay, and resolution audit. Billing receives guarded invoice-eligibility events only; no accounting invoice is created. Production vendor integrations remain deferred.
 
 ## Local setup
 
@@ -32,6 +32,8 @@ pnpm test:fulfillment-process
 pnpm test:exception-commands
 pnpm test:reconciliation
 pnpm test:operator
+pnpm test:security
+pnpm security:scan
 pnpm start:api
 ```
 
@@ -65,5 +67,6 @@ The repository contains no proprietary WMS, carrier, commerce, or accounting con
 
 In development/test, `pnpm start:api` serves the synthetic operator console at `http://localhost:3000/`.
 It reads the tenant-scoped `/api/*` routes, displays loading/empty/error/stale states, and labels
-the simulator as `Demo Simulator`. The console does not connect to PostgreSQL directly; production
-authentication and role enforcement remain part of the security milestone.
+the simulator as `Demo Simulator`. The console does not connect to PostgreSQL directly. Its
+headers identify a synthetic demo operator and are rejected by the authentication seam in
+production until an external authentication adapter is supplied.
