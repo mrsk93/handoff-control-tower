@@ -18,14 +18,14 @@ describe("M11 named scenario campaign", () => {
     }
   });
 
-  it.each(scenarioIds)("passes %s through the public runner", (id) => {
-    const result = runScenario(id);
+  it.each(scenarioIds)("passes %s through the public runner", async (id) => {
+    const result = await runScenario(id);
     expect(result.passed, result.evidence.join("; ")).toBe(true);
   });
 
-  it("runs the complete campaign with a reproducible seed", () => {
-    const first = runScenarioCampaign(20260907);
-    const second = runScenarioCampaign(20260907);
+  it("runs the complete campaign with a reproducible seed", async () => {
+    const first = await runScenarioCampaign(20260907);
+    const second = await runScenarioCampaign(20260907);
     expect(first.passed).toBe(true);
     expect(second).toEqual(first);
   });
