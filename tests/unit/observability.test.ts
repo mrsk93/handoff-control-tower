@@ -67,4 +67,21 @@ describe("observability seam", () => {
       'handoff_inbound_messages_total{status="received",system="commerce"} 2',
     );
   });
+
+  it("scrubs credential-like text from approved log fields and identifiers", () => {
+    const lines: string[] = [];
+    const logger = new StructuredLogger((line) => lines.push(line));
+    logger.warn(
+      "provider.failure",
+      { correlationId: "token=secret-correlation" },
+      { reasonCode: "authorization=secret-header", errorClass: "Bearer secret-token" },
+    );
+    const event = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
+    expect(event).toMatchObject({
+      correlationId: "token=[REDACTED]",
+      reasonCode: "authorization=[REDACTED]",
+      errorClass: "[REDACTED]",
+    });
+    expect(JSON.stringify(event)).not.toContain("secret");
+  });
 });

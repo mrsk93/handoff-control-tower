@@ -57,22 +57,34 @@ const fieldKeys = new Set([
 
 function safeFields(fields: StructuredLogFields): StructuredLogFields {
   return Object.fromEntries(
-    Object.entries(fields).filter(
-      ([key, value]) =>
-        fieldKeys.has(key) &&
-        (typeof value === "string" ||
-          typeof value === "number" ||
-          typeof value === "boolean" ||
-          value === null),
-    ),
+    Object.entries(fields)
+      .filter(
+        ([key, value]) =>
+          fieldKeys.has(key) &&
+          (typeof value === "string" ||
+            typeof value === "number" ||
+            typeof value === "boolean" ||
+            value === null),
+      )
+      .map(([key, value]) => [key, typeof value === "string" ? redactLogText(value) : value]),
   );
+}
+
+function redactLogText(value: string): string {
+  return value
+    .replace(/\b(?:bearer|basic)\s+[^\s,;]+/gi, "[REDACTED]")
+    .replace(
+      /((?:authorization|api[-_]?key|password|secret|signature|token)\s*[:=]\s*)[^\s,;]+/gi,
+      "$1[REDACTED]",
+    );
 }
 
 function safeIdentifiers(identifiers: TraceIdentifiers): TraceIdentifiers {
   return Object.fromEntries(
     identifierKeys
       .map((key) => [key, identifiers[key]] as const)
-      .filter(([, value]) => typeof value === "string" && value.length > 0),
+      .filter(([, value]) => typeof value === "string" && value.length > 0)
+      .map(([key, value]) => [key, redactLogText(value as string)] as const),
   );
 }
 
@@ -89,7 +101,7 @@ export class StructuredLogger {
       JSON.stringify({
         timestamp: new Date().toISOString(),
         level,
-        event,
+        event: redactLogText(event),
         ...safeIdentifiers(identifiers),
         ...safeFields(fields),
       }),

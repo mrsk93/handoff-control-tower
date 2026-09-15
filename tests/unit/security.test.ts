@@ -2,10 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   AccessDeniedError,
   AuthenticationError,
+  CredentialAccessDeniedError,
   FixedWindowRateLimiter,
   InMemoryRateLimitStore,
   authenticateSyntheticPrincipal,
   createAesGcmCredentialCipher,
+  createInMemoryCredentialVault,
+  createInMemoryProtectedReplayStore,
+  redactHeaders,
+  redactSensitive,
+  redactUrl,
+  sha256Hex,
   type OperatorPrincipal,
 } from "@handoff/security";
 
@@ -84,5 +91,116 @@ describe("credential encryption seam", () => {
       appEnv: "test",
     });
     expect(JSON.stringify(principal)).not.toContain("credential");
+  });
+
+  it("redacts nested PII, sensitive headers, and URL query values", () => {
+    const redacted = redactSensitive({
+      orderId: "order-1",
+      customer: { email: "customer@example.com", address: { line1: "1 Main St" } },
+      accessToken: "token-value",
+      quantity: 2,
+    }) as Record<string, unknown>;
+    expect(redacted).toMatchObject({
+      orderId: "order-1",
+      customer: { email: "[REDACTED]", address: "[REDACTED]" },
+      accessToken: "[REDACTED]",
+      quantity: 2,
+    });
+    expect(
+      redactHeaders({
+        authorization: "Bearer secret-token",
+        "x-request-id": "request-1",
+        "x-tags": ["a", "b"],
+      }),
+    ).toEqual({
+      authorization: "[REDACTED]",
+      "x-request-id": "request-1",
+      "x-tags": ["a", "b"],
+    });
+    const safeUrl = redactUrl("https://example.test/orders?page=2&token=secret#private");
+    expect(safeUrl).toContain("page=2");
+    expect(safeUrl).not.toContain("secret");
+    expect(safeUrl).not.toContain("private");
+  });
+
+  it("keeps credential vault reads tenant-scoped", async () => {
+    const vault = createInMemoryCredentialVault(createAesGcmCredentialCipher(Buffer.alloc(32, 8)));
+    const metadata = await vault.put({
+      tenantId: principalInput.tenantId,
+      systemType: "shopify",
+      plaintext: Buffer.from("client-secret", "utf8"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    expect(metadata).toEqual({
+      tenantId: principalInput.tenantId,
+      systemType: "shopify",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await expect(
+      vault.get({
+        tenantId: principalInput.tenantId,
+        systemType: "shopify",
+        requesterTenantId: principalInput.tenantId,
+      }),
+    ).resolves.toEqual(Buffer.from("client-secret", "utf8"));
+    await expect(
+      vault.get({
+        tenantId: principalInput.tenantId,
+        systemType: "shopify",
+        requesterTenantId: "22222222-2222-4222-8222-222222222222",
+      }),
+    ).rejects.toThrow(CredentialAccessDeniedError);
+  });
+
+  it("expires protected replay bodies and records redacted purge evidence", async () => {
+    const receivedAt = new Date("2026-01-01T00:00:00.000Z");
+    let currentTime = receivedAt;
+    const audits: Array<{ action: string; replayId: string; bodySha256: string }> = [];
+    const store = createInMemoryProtectedReplayStore(
+      createAesGcmCredentialCipher(Buffer.alloc(32, 9)),
+      {
+        now: () => currentTime,
+        audit: (event) => audits.push(event),
+      },
+    );
+    const rawBody = Buffer.from('{"email":"customer@example.com"}', "utf8");
+    const metadata = await store.put({
+      replayId: "replay-1",
+      tenantId: principalInput.tenantId,
+      source: "shopify",
+      rawBody,
+      receivedAt,
+      expiresAt: new Date(receivedAt.getTime() + 60_000),
+    });
+    expect(metadata.bodySha256).toBe(sha256Hex(rawBody));
+    expect(JSON.stringify(metadata)).not.toContain("customer@example.com");
+    await expect(
+      store.read({ replayId: "replay-1", tenantId: principalInput.tenantId }),
+    ).resolves.toEqual(rawBody);
+    await expect(
+      store.read({
+        replayId: "replay-1",
+        tenantId: "22222222-2222-4222-8222-222222222222",
+      }),
+    ).rejects.toThrow(CredentialAccessDeniedError);
+    currentTime = new Date(receivedAt.getTime() + 60_000);
+    await expect(
+      store.read({ replayId: "replay-1", tenantId: principalInput.tenantId }),
+    ).resolves.toBeNull();
+    expect(audits.map(({ action }) => action)).toEqual([
+      "replay.stored",
+      "replay.read",
+      "replay.purged",
+    ]);
+    await expect(
+      store.put({
+        replayId: "replay-too-long",
+        tenantId: principalInput.tenantId,
+        source: "shopify",
+        rawBody,
+        receivedAt,
+        expiresAt: new Date(receivedAt.getTime() + 16 * 60_000),
+      }),
+    ).rejects.toThrow("short-lived window");
   });
 });
