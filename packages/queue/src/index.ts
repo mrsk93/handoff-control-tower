@@ -3,5 +3,6 @@ export type DeliveryGuarantee = "at-least-once";
 export * from "./inbox-ingestion";
 export * from "./outbox-dispatcher";
 export * from "./sync-operation-executor";
+export * from "./durable-job-router";
 export * from "./reconciliation";
 export * from "./fulfillment-process-manager";

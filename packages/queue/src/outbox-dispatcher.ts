@@ -60,6 +60,11 @@ function toDelivery(claim: OutboxClaim): OutboundDelivery {
   const delivery: OutboundDelivery = {
     id: claim.id,
     tenantId: claim.tenantId,
+    ...(claim.jobType
+      ? { jobType: claim.jobType as Exclude<OutboundDelivery["jobType"], undefined> }
+      : {}),
+    ...(claim.connectionId ? { connectionId: claim.connectionId } : {}),
+    ...(claim.syncOperationId ? { syncOperationId: claim.syncOperationId } : {}),
     destination: claim.destination,
     messageType: claim.messageType,
     messageVersion: claim.messageVersion,
@@ -70,6 +75,10 @@ function toDelivery(claim: OutboxClaim): OutboundDelivery {
     availableAt: claim.availableAt.toISOString(),
   };
   if (claim.causationId !== null) delivery.causationId = claim.causationId;
+  if (claim.workflowType !== null) delivery.workflowType = claim.workflowType;
+  if (claim.aggregateType !== null) delivery.aggregateType = claim.aggregateType;
+  if (claim.aggregateId !== null) delivery.aggregateId = claim.aggregateId;
+  if (claim.providerApiVersion !== null) delivery.providerApiVersion = claim.providerApiVersion;
   return delivery;
 }
 

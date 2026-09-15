@@ -1,9 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeTestDatabase, openPreparedTestDatabase, testDatabaseUrl } from "./helpers";
-import { createOutboxRepository, DEMO_TENANTS, orders, type DatabaseHandle } from "@handoff/db";
+import {
+  createOutboxRepository,
+  DEMO_TENANTS,
+  orders,
+  syncOperations,
+  type DatabaseHandle,
+} from "@handoff/db";
 import type { OutboundMessage } from "@handoff/domain";
 
 const now = new Date("2026-01-01T00:20:00.000Z");
+const northstarContext = { tenantId: DEMO_TENANTS.northstar };
 
 function outboundMessage(overrides: Partial<OutboundMessage> = {}): OutboundMessage {
   return {
@@ -171,5 +178,109 @@ describe.skipIf(!testDatabaseUrl)("transactional outbox", () => {
         now,
       ),
     ).rejects.toThrow("outbox message tenant does not match transaction tenant");
+  });
+
+  it("links a durable job to one operation atomically and rejects conflicting publication", async () => {
+    if (!handle) throw new Error("test database was not opened");
+    const repository = createOutboxRepository(handle.db);
+    const operationId = "a1111111-1111-4111-8111-111111111111";
+    const conflictingOperationId = "a2222222-2222-4222-8222-222222222222";
+    await repository.inTransaction(
+      northstarContext,
+      async (transaction, outbox) => {
+        await transaction.insert(syncOperations).values({
+          id: operationId,
+          tenantId: DEMO_TENANTS.northstar,
+          workflowType: "order_release",
+          aggregateType: "order",
+          aggregateId: "COM-M4-JOB-1001",
+          direction: "push",
+          idempotencyKey: "m4-job-operation-1001",
+          commandHash: "m4-job-command-1001",
+          status: "pending",
+          attemptCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const result = await outbox.append(
+          outboundMessage({
+            destination: "internal",
+            messageType: "order.release.v1",
+            idempotencyKey: "m4-job-publication-1001",
+            jobType: "order",
+            syncOperationId: operationId,
+            workflowType: "order_release",
+            aggregateType: "order",
+            aggregateId: "COM-M4-JOB-1001",
+          }),
+        );
+        expect(result.duplicate).toBe(false);
+      },
+      now,
+    );
+    const persisted = await handle.pool.query<{
+      sync_operation_id: string;
+      job_type: string;
+      workflow_type: string;
+      aggregate_id: string;
+    }>(
+      `select sync_operation_id, job_type, workflow_type, aggregate_id
+       from outbox_messages where idempotency_key = 'm4-job-publication-1001'`,
+    );
+    expect(persisted.rows[0]).toEqual({
+      sync_operation_id: operationId,
+      job_type: "order",
+      workflow_type: "order_release",
+      aggregate_id: "COM-M4-JOB-1001",
+    });
+
+    await handle.db.insert(syncOperations).values({
+      id: conflictingOperationId,
+      tenantId: DEMO_TENANTS.northstar,
+      workflowType: "order_release",
+      aggregateType: "order",
+      aggregateId: "COM-M4-JOB-1002",
+      direction: "push",
+      idempotencyKey: "m4-job-operation-1002",
+      commandHash: "m4-job-command-1002",
+      status: "pending",
+      attemptCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await expect(
+      repository.inTransaction(
+        northstarContext,
+        (_transaction, outbox) =>
+          outbox.append(
+            outboundMessage({
+              destination: "internal",
+              messageType: "order.release.v1",
+              idempotencyKey: "m4-job-publication-1001",
+              jobType: "order",
+              syncOperationId: conflictingOperationId,
+            }),
+          ),
+        now,
+      ),
+    ).rejects.toMatchObject({ code: "OUTBOX_OPERATION_CONFLICT" });
+  });
+
+  it("rejects oversized payloads before creating a durable intent", async () => {
+    if (!handle) throw new Error("test database was not opened");
+    const repository = createOutboxRepository(handle.db);
+    await expect(
+      repository.inTransaction(
+        northstarContext,
+        (_transaction, outbox) =>
+          outbox.append(
+            outboundMessage({
+              idempotencyKey: "m4-oversized-payload",
+              payload: { data: "x".repeat(256 * 1024) },
+            }),
+          ),
+        now,
+      ),
+    ).rejects.toThrow("outbox payload exceeds");
   });
 });

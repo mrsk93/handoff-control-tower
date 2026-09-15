@@ -587,6 +587,7 @@ export const outboxMessages = pgTable(
       .references(() => tenants.id),
     connectionId: uuid("connection_id"),
     syncOperationId: uuid("sync_operation_id"),
+    jobType: text("job_type"),
     destination: text("destination").notNull(),
     messageType: text("message_type").notNull(),
     messageVersion: integer("message_version").notNull(),

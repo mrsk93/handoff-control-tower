@@ -1,3 +1,6 @@
+export const durableJobTypes = ["catalog", "order", "fulfillment", "reconciliation"] as const;
+export type DurableJobType = (typeof durableJobTypes)[number];
+
 export type OutboundMessage = {
   tenantId: string;
   destination: string;
@@ -8,6 +11,13 @@ export type OutboundMessage = {
   correlationId: string;
   causationId?: string;
   availableAt?: string;
+  jobType?: DurableJobType;
+  connectionId?: string;
+  syncOperationId?: string;
+  workflowType?: string;
+  aggregateType?: string;
+  aggregateId?: string;
+  providerApiVersion?: string;
 };
 
 export type OutboundDelivery = OutboundMessage & {

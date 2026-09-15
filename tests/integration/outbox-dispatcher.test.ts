@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DeterministicMockOutboundAdapter } from "@handoff/adapters";
 import { closeTestDatabase, openPreparedTestDatabase, testDatabaseUrl } from "./helpers";
 import { createOutboxRepository, DEMO_TENANTS, type DatabaseHandle } from "@handoff/db";
-import { createOutboxDispatcher } from "@handoff/queue";
+import { createDurableJobRouter, createOutboxDispatcher } from "@handoff/queue";
 import type { OutboundDelivery, OutboundDeliveryAdapter, OutboundMessage } from "@handoff/domain";
 
 const now = new Date("2026-01-01T00:30:00.000Z");
@@ -62,6 +62,35 @@ describe.skipIf(!testDatabaseUrl)("outbox dispatcher", () => {
       `select status, attempt_count from outbox_messages where idempotency_key = 'm4-dispatch-sent'`,
     );
     expect(row.rows[0]).toEqual({ status: "sent", attempt_count: 1 });
+  });
+
+  it("routes a committed logical job through the durable outbox dispatcher", async () => {
+    if (!handle) throw new Error("test database was not opened");
+    const message = outboundMessage({
+      destination: "internal",
+      messageType: "catalog.sync.v1",
+      jobType: "catalog",
+      idempotencyKey: "m4-dispatch-route",
+    });
+    await appendMessage(handle, message);
+    let routed = false;
+    const adapter = createDurableJobRouter({
+      catalog: (delivery) => {
+        routed = delivery.jobType === "catalog" && delivery.messageType === "catalog.sync.v1";
+        return Promise.resolve({
+          remoteReceiptId: "internal-catalog-1001",
+          idempotencyKey: delivery.idempotencyKey,
+          correlationId: delivery.correlationId,
+          acceptedAt: now.toISOString(),
+          duplicate: false,
+        });
+      },
+    });
+    const dispatcher = createOutboxDispatcher({ db: handle.db, config, adapter });
+    await expect(
+      dispatcher.dispatchNext({ tenantId: DEMO_TENANTS.northstar }, "dispatcher-route", now),
+    ).resolves.toMatchObject({ status: "sent", remoteReceiptId: "internal-catalog-1001" });
+    expect(routed).toBe(true);
   });
 
   it("retries transient adapter failures with deterministic backoff", async () => {

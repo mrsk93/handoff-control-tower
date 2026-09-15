@@ -7,6 +7,8 @@ import { inboxMessages, orders, outboxDeliveryReceipts, outboxMessages, tenants 
 import { requireTenantContext, type TenantContext } from "./tenant-context";
 import type { Transaction } from "./transaction";
 
+export const MAX_OUTBOX_PAYLOAD_BYTES = 256 * 1024;
+
 export type TenantRepository = ReturnType<typeof createTenantRepository>;
 
 export function createTenantRepository(db: Database) {
@@ -453,6 +455,15 @@ export type OutboxClaim = typeof outboxMessages.$inferSelect;
 
 export type OutboxDeliveryReceipt = typeof outboxDeliveryReceipts.$inferSelect;
 
+export class OutboxOperationConflictError extends Error {
+  readonly code = "OUTBOX_OPERATION_CONFLICT";
+
+  constructor(readonly idempotencyKey: string) {
+    super("outbox idempotency key is already linked to a different sync operation");
+    this.name = "OutboxOperationConflictError";
+  }
+}
+
 async function assertTenantExists(transaction: Transaction, tenantId: string): Promise<void> {
   const rows = await transaction
     .select({ id: tenants.id })
@@ -475,12 +486,27 @@ function createOutboxWriter(
       if (message.messageVersion < 1) {
         throw new Error("outbox messageVersion must be positive");
       }
+      if (message.idempotencyKey.trim().length === 0) {
+        throw new Error("outbox idempotencyKey is required");
+      }
+      let payloadBytes: number;
+      try {
+        payloadBytes = Buffer.byteLength(JSON.stringify(message.payload), "utf8");
+      } catch {
+        throw new Error("outbox payload must be serializable");
+      }
+      if (payloadBytes > MAX_OUTBOX_PAYLOAD_BYTES) {
+        throw new Error(`outbox payload exceeds ${MAX_OUTBOX_PAYLOAD_BYTES} bytes`);
+      }
       const createdAt = transactionNow;
       const inserted = await transaction
         .insert(outboxMessages)
         .values({
           id: randomUUID(),
           tenantId: context.tenantId,
+          connectionId: message.connectionId ?? null,
+          syncOperationId: message.syncOperationId ?? null,
+          jobType: message.jobType ?? null,
           destination: message.destination,
           messageType: message.messageType,
           messageVersion: message.messageVersion,
@@ -493,6 +519,11 @@ function createOutboxWriter(
           lockedAt: null,
           lockedBy: null,
           attemptCount: 0,
+          workflowType: message.workflowType ?? null,
+          aggregateType: message.aggregateType ?? null,
+          aggregateId: message.aggregateId ?? null,
+          providerApiVersion: message.providerApiVersion ?? null,
+          lastRequestId: null,
           lastError: null,
           sentAt: null,
           createdAt,
@@ -514,6 +545,11 @@ function createOutboxWriter(
         )
         .limit(1);
       if (!existing[0]) throw new Error("outbox conflict did not return the existing message");
+      const existingOperationId = existing[0].syncOperationId;
+      const incomingOperationId = message.syncOperationId ?? null;
+      if (existingOperationId !== incomingOperationId) {
+        throw new OutboxOperationConflictError(message.idempotencyKey);
+      }
       return { duplicate: true, message: existing[0] };
     },
   };
