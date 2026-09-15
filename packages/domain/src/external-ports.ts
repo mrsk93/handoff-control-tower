@@ -1,5 +1,7 @@
 import type {
+  CanonicalCustomer,
   CanonicalOrder,
+  CanonicalSku,
   CommerceFulfillmentReadback,
   FulfillmentActual,
   InvoiceEligibilityDecision,
@@ -7,11 +9,22 @@ import type {
   ShipmentLine,
 } from "./types";
 
+export type ConnectorContext = {
+  tenantId: string;
+  connectionId: string;
+  correlationId: string;
+  requestedAt: string;
+  idempotencyKey?: string;
+  signal?: AbortSignal;
+};
+
 export type ExternalRequestContext = {
   tenantId: string;
   idempotencyKey: string;
   correlationId: string;
   requestedAt: string;
+  connectionId?: string;
+  signal?: AbortSignal;
 };
 
 export type ExternalPageRequest = {
@@ -22,6 +35,33 @@ export type ExternalPageRequest = {
 export type ExternalPage<T> = {
   items: T[];
   nextCursor: string | null;
+};
+
+export type ConnectorPage<T> = ExternalPage<T> & {
+  hasMore: boolean;
+};
+
+export type ConnectorRateLimit = {
+  remaining?: number;
+  resetAt?: string;
+};
+
+export type ConnectorResult<T> = {
+  value: T;
+  requestId?: string;
+  rateLimit?: ConnectorRateLimit;
+};
+
+export type ConnectorHealth = {
+  ok: boolean;
+  connectorVersion: string;
+  providerVersion?: string;
+  checkedAt: string;
+};
+
+export type HealthProbeV1 = {
+  readonly version: "health.v1";
+  check(context: ConnectorContext): Promise<ConnectorResult<ConnectorHealth>>;
 };
 
 export type ExternalWriteReceipt = {
@@ -120,4 +160,59 @@ export type BillingAdapterV1 = {
     context: ExternalRequestContext,
     page: ExternalPageRequest,
   ): Promise<ExternalPage<BillingEligibilityEvent>>;
+};
+
+export type ExternalLookup = {
+  resource: string;
+  key: string;
+  externalId?: string;
+};
+
+export type CatalogAdapterV1 = {
+  readonly version: "catalog.v1";
+  findSku(
+    context: ConnectorContext,
+    lookup: ExternalLookup,
+  ): Promise<ConnectorResult<CanonicalSku | null>>;
+  upsertSku(
+    context: ConnectorContext,
+    input: { sku: CanonicalSku; externalKey: string },
+  ): Promise<ConnectorResult<CanonicalSku>>;
+};
+
+export type ErpAdapterV1 = {
+  readonly version: "erp.v1";
+  health: HealthProbeV1;
+  findCustomer(
+    context: ConnectorContext,
+    lookup: ExternalLookup,
+  ): Promise<ConnectorResult<CanonicalCustomer | null>>;
+  upsertCustomer(
+    context: ConnectorContext,
+    input: { customer: CanonicalCustomer; externalKey: string },
+  ): Promise<ConnectorResult<CanonicalCustomer>>;
+  findItem(
+    context: ConnectorContext,
+    lookup: ExternalLookup,
+  ): Promise<ConnectorResult<CanonicalSku | null>>;
+  upsertItem(
+    context: ConnectorContext,
+    input: { sku: CanonicalSku; externalKey: string },
+  ): Promise<ConnectorResult<CanonicalSku>>;
+  findSalesOrder(
+    context: ConnectorContext,
+    lookup: ExternalLookup,
+  ): Promise<ConnectorResult<CanonicalOrder | null>>;
+  createSalesOrder(
+    context: ConnectorContext,
+    input: { order: CanonicalOrder; externalKey: string },
+  ): Promise<ConnectorResult<CanonicalOrder>>;
+  findDeliveryNote(
+    context: ConnectorContext,
+    lookup: ExternalLookup,
+  ): Promise<ConnectorResult<Shipment | null>>;
+  createDeliveryNote(
+    context: ConnectorContext,
+    input: { order: CanonicalOrder; shipment: Shipment; externalKey: string },
+  ): Promise<ConnectorResult<Shipment>>;
 };

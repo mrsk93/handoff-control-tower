@@ -8,7 +8,14 @@ import type {
   ExternalRequestContext,
   ExternalWriteReceipt,
   FulfillmentActual,
+  ConnectorContext,
   WarehouseOrderRequest,
+} from "@handoff/domain";
+import {
+  classifyConnectorError,
+  connectorErrorFromStatus,
+  PermanentConnectorError,
+  RetryableConnectorError,
 } from "@handoff/domain";
 
 const northstar = "00000000-0000-4000-8000-000000000001";
@@ -245,6 +252,66 @@ describe("shared synthetic adapter contract", () => {
       seed: 9,
       delayMs: 2,
       delays: { "commerce.get_order": 4 },
+    });
+  });
+
+  it("exposes a typed health seam for the deterministic mock boundary", async () => {
+    const suite = createMockAdapterSuite();
+    const callContext: ConnectorContext = {
+      tenantId: northstar,
+      connectionId: "mock-connection",
+      correlationId: "health-correlation",
+      requestedAt: "2026-01-01T00:00:00.000Z",
+      idempotencyKey: "health-1",
+    };
+    await expect(suite.health.check(callContext)).resolves.toMatchObject({
+      value: { ok: true, connectorVersion: "mock.v1", providerVersion: "synthetic" },
+      requestId: "mock-health:00000000-0000-4000-8000-000000000001:mock-connection",
+    });
+  });
+
+  it("classifies connector failures with safe, retry-aware metadata", () => {
+    const retryable = new RetryableConnectorError("provider timeout", "TIMEOUT", {
+      retryAfterMs: 250,
+      requestId: "request-1",
+      operation: "orders.get",
+    });
+    expect(retryable).toMatchObject({
+      category: "retryable",
+      code: "TIMEOUT",
+      retryable: true,
+      metadata: { retryAfterMs: 250, requestId: "request-1", operation: "orders.get" },
+    });
+    const permanent = new PermanentConnectorError(
+      "invalid payload",
+      "VALIDATION",
+      { statusCode: 422 },
+      "validation",
+    );
+    expect(permanent).toMatchObject({ category: "validation", retryable: false });
+    const unknown = classifyConnectorError(new Error("token=secret-value"));
+    expect(unknown.message).not.toContain("secret-value");
+    expect(unknown.category).toBe("unknown");
+  });
+
+  it("maps provider status codes to safe connector categories", () => {
+    expect(
+      connectorErrorFromStatus(429, "orders.create", { requestId: "request-429" }),
+    ).toMatchObject({
+      code: "CONNECTOR_RATE_LIMITED",
+      category: "rate_limited",
+      retryable: true,
+      metadata: { requestId: "request-429", statusCode: 429, operation: "orders.create" },
+    });
+    expect(connectorErrorFromStatus(422, "orders.create")).toMatchObject({
+      code: "CONNECTOR_VALIDATION_FAILED",
+      category: "validation",
+      retryable: false,
+    });
+    expect(connectorErrorFromStatus(401, "health.check")).toMatchObject({
+      code: "CONNECTOR_AUTH_FAILED",
+      category: "authentication",
+      retryable: false,
     });
   });
 });
