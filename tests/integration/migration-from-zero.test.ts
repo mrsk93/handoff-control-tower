@@ -48,13 +48,13 @@ describe.skipIf(!testDatabaseUrl)("migration-from-zero", () => {
        ('tenants', 'connections', 'inbox_messages', 'outbox_messages', 'orders', 'order_lines',
         'fulfillments', 'fulfillment_lines', 'shipments', 'shipment_lines', 'process_instances',
         'exceptions', 'reconciliation_runs', 'reconciliation_findings', 'audit_events',
-        'external_references')
+        'external_references', 'catalog_items', 'customers')
        order by table_name`,
     );
     expect(applied.rows.map((row) => row.name)).toEqual(
       migrations.map((migration) => migration.name),
     );
-    expect(tables.rows).toHaveLength(16);
+    expect(tables.rows).toHaveLength(18);
     const connectionColumns = await handle.pool.query<{ column_name: string }>(
       `select column_name from information_schema.columns
        where table_schema = 'public' and table_name = 'connections' and column_name = 'environment'`,

@@ -1,5 +1,6 @@
 import {
   boolean,
+  bigint,
   check,
   customType,
   integer,
@@ -133,6 +134,50 @@ export const externalReferences = pgTable(
   ],
 );
 
+export const catalogItems = pgTable(
+  "catalog_items",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    sku: text("sku").notNull(),
+    normalizedSku: text("normalized_sku").notNull(),
+    name: text("name").notNull(),
+    barcode: text("barcode"),
+    active: boolean("active").notNull().default(true),
+    requiresShipping: boolean("requires_shipping").notNull().default(true),
+    unit: text("unit").notNull().default("EA"),
+    weight: jsonb("weight"),
+    dimensions: jsonb("dimensions"),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("catalog_items_tenant_normalized_sku_uq").on(table.tenantId, table.normalizedSku),
+    index("catalog_items_tenant_idx").on(table.tenantId),
+  ],
+);
+
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    email: text("email"),
+    displayName: text("display_name").notNull(),
+    phone: text("phone"),
+    billingAddress: jsonb("billing_address"),
+    shippingAddresses: jsonb("shipping_addresses").notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [index("customers_tenant_idx").on(table.tenantId)],
+);
+
 export const inboxMessages = pgTable(
   "inbox_messages",
   {
@@ -184,6 +229,19 @@ export const orders = pgTable(
     sourceVersion: text("source_version").notNull(),
     orderNumber: text("order_number").notNull(),
     currency: text("currency").notNull(),
+    customerId: uuid("customer_id").references(() => customers.id),
+    lifecycleStatus: text("lifecycle_status"),
+    financialStatus: text("financial_status"),
+    requestedShippingMethod: text("requested_shipping_method"),
+    shippingAddress: jsonb("shipping_address"),
+    billingAddress: jsonb("billing_address"),
+    subtotalMinor: bigint("subtotal_minor", { mode: "bigint" }),
+    shippingTotalMinor: bigint("shipping_total_minor", { mode: "bigint" }),
+    taxTotalMinor: bigint("tax_total_minor", { mode: "bigint" }),
+    discountTotalMinor: bigint("discount_total_minor", { mode: "bigint" }),
+    grandTotalMinor: bigint("grand_total_minor", { mode: "bigint" }),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+    observedAt: timestamp("observed_at", { withTimezone: true }),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull(),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     releaseStatus: text("release_status").notNull(),
@@ -194,6 +252,7 @@ export const orders = pgTable(
   },
   (table) => [
     uniqueIndex("orders_tenant_source_id_uq").on(table.tenantId, table.sourceOrderId),
+    uniqueIndex("orders_tenant_order_number_uq").on(table.tenantId, table.orderNumber),
     index("orders_tenant_idx").on(table.tenantId),
     check(
       "orders_release_status_ck",
@@ -213,12 +272,21 @@ export const orderLines = pgTable(
       .notNull()
       .references(() => orders.id),
     sourceLineId: text("source_line_id").notNull(),
+    lineNumber: text("line_number"),
+    skuId: uuid("sku_id").references(() => catalogItems.id),
     sku: text("sku").notNull(),
+    title: text("title"),
+    unit: text("unit"),
+    orderedQuantity: jsonb("ordered_quantity"),
+    unitPriceMinor: bigint("unit_price_minor", { mode: "bigint" }),
+    discountTotalMinor: bigint("discount_total_minor", { mode: "bigint" }),
+    taxTotalMinor: bigint("tax_total_minor", { mode: "bigint" }),
     orderedQty: integer("ordered_qty").notNull(),
     cancelledQty: integer("cancelled_qty").notNull().default(0),
   },
   (table) => [
     uniqueIndex("order_lines_order_source_id_uq").on(table.orderId, table.sourceLineId),
+    uniqueIndex("order_lines_order_line_number_uq").on(table.orderId, table.lineNumber),
     index("order_lines_tenant_idx").on(table.tenantId),
     check(
       "order_lines_nonnegative_ck",
@@ -240,13 +308,18 @@ export const fulfillments = pgTable(
       .references(() => orders.id),
     warehouseOrderId: text("warehouse_order_id"),
     status: text("status").notNull(),
+    provider: text("provider").notNull().default("wms"),
     sourceVersion: text("source_version"),
     rowVersion: integer("row_version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
-    uniqueIndex("fulfillments_order_uq").on(table.tenantId, table.orderId),
+    uniqueIndex("fulfillments_tenant_order_provider_uq").on(
+      table.tenantId,
+      table.orderId,
+      table.provider,
+    ),
     index("fulfillments_tenant_idx").on(table.tenantId),
   ],
 );
@@ -294,6 +367,8 @@ export const shipments = pgTable(
     orderId: uuid("order_id")
       .notNull()
       .references(() => orders.id),
+    fulfillmentId: uuid("fulfillment_id").references(() => fulfillments.id),
+    provider: text("provider").notNull().default("wms"),
     sourceShipmentId: text("source_shipment_id"),
     externalShipmentId: text("external_shipment_id"),
     carrierCode: text("carrier_code").notNull(),
@@ -301,12 +376,20 @@ export const shipments = pgTable(
     trackingNumber: text("tracking_number").notNull(),
     trackingUrl: text("tracking_url"),
     shippedAt: timestamp("shipped_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+    observedAt: timestamp("observed_at", { withTimezone: true }),
     status: text("status").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
     uniqueIndex("shipments_tenant_source_id_uq").on(table.tenantId, table.sourceShipmentId),
+    uniqueIndex("shipments_tenant_provider_external_uq").on(
+      table.tenantId,
+      table.provider,
+      table.externalShipmentId,
+    ),
     uniqueIndex("shipments_tenant_tracking_uq").on(
       table.tenantId,
       table.trackingNumber,
