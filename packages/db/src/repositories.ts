@@ -2,14 +2,8 @@ import { and, asc, eq, inArray, isNotNull, lte, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { IntegrationEvent, OutboundDeliveryReceipt, OutboundMessage } from "@handoff/domain";
 import type { Database } from "./client";
-import {
-  connections,
-  inboxMessages,
-  orders,
-  outboxDeliveryReceipts,
-  outboxMessages,
-  tenants,
-} from "./schema";
+import { createConnectionRepository } from "./connection-repository";
+import { inboxMessages, orders, outboxDeliveryReceipts, outboxMessages, tenants } from "./schema";
 import { requireTenantContext, type TenantContext } from "./tenant-context";
 import type { Transaction } from "./transaction";
 
@@ -24,8 +18,7 @@ export function createTenantRepository(db: Database) {
     },
 
     async listConnections(context: TenantContext) {
-      const scoped = requireTenantContext(context.tenantId);
-      return db.select().from(connections).where(eq(connections.tenantId, scoped.tenantId));
+      return createConnectionRepository(db).listSafeConnections(context);
     },
   };
 }
