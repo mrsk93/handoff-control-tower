@@ -1,4 +1,5 @@
 export * from "./client";
+export * from "./canonical-repository";
 export * from "./connection-repository";
 export * from "./exception-repository";
 export * from "./migrations";
