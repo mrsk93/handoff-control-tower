@@ -21,9 +21,15 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
 export const tenantStatus = pgEnum("tenant_status", ["active", "suspended"]);
 export const connectionSystemType = pgEnum("connection_system_type", [
   "commerce",
+  "erp",
   "wms",
   "carrier",
   "billing",
+]);
+export const connectionEnvironment = pgEnum("connection_environment", [
+  "mock",
+  "sandbox",
+  "production",
 ]);
 export const connectionStatus = pgEnum("connection_status", [
   "active",
@@ -69,6 +75,7 @@ export const connections = pgTable(
       .notNull()
       .references(() => tenants.id),
     systemType: connectionSystemType("system_type").notNull(),
+    environment: connectionEnvironment("environment").notNull().default("mock"),
     adapterKey: text("adapter_key").notNull(),
     status: connectionStatus("status").notNull().default("active"),
     encryptedCredentials: bytea("encrypted_credentials"),
@@ -78,8 +85,51 @@ export const connections = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
   (table) => [
-    uniqueIndex("connections_tenant_system_uq").on(table.tenantId, table.systemType),
+    uniqueIndex("connections_tenant_system_environment_uq").on(
+      table.tenantId,
+      table.systemType,
+      table.environment,
+    ),
     index("connections_tenant_idx").on(table.tenantId),
+  ],
+);
+
+export const externalReferences = pgTable(
+  "external_references",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => connections.id),
+    systemType: text("system_type").notNull(),
+    resourceType: text("resource_type").notNull(),
+    externalId: text("external_id").notNull(),
+    canonicalType: text("canonical_type").notNull(),
+    canonicalId: uuid("canonical_id").notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("external_references_tenant_system_resource_external_uq").on(
+      table.tenantId,
+      table.systemType,
+      table.resourceType,
+      table.externalId,
+    ),
+    uniqueIndex("external_references_tenant_connection_canonical_uq").on(
+      table.tenantId,
+      table.connectionId,
+      table.systemType,
+      table.resourceType,
+      table.canonicalType,
+      table.canonicalId,
+    ),
+    index("external_references_tenant_idx").on(table.tenantId),
+    index("external_references_connection_idx").on(table.tenantId, table.connectionId),
   ],
 );
 

@@ -5,6 +5,7 @@ import {
   createOrderRepository,
   createTenantRepository,
   DEMO_TENANTS,
+  externalReferences,
   inTransaction,
   orders,
   outboxMessages,
@@ -98,5 +99,68 @@ describe.skipIf(!testDatabaseUrl)("tenant-scoped persistence", () => {
       "select (select count(*) from orders where source_order_id = 'COM-ROLLBACK-1001') as orders, (select count(*) from outbox_messages where idempotency_key = 'rollback-outbox-1001') as outbox",
     );
     expect(rolledBackState.rows[0]).toEqual({ orders: "0", outbox: "0" });
+  });
+
+  it("enforces tenant-scoped external reference ownership and uniqueness", async () => {
+    if (!handle) throw new Error("database was not opened");
+    const northstarConnection = "31111111-1111-4111-8111-111111111111";
+    const bluebirdConnection = "32222222-2222-4222-8222-222222222221";
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    await handle.db.insert(externalReferences).values({
+      id: "81111111-1111-4111-8111-111111111111",
+      tenantId: DEMO_TENANTS.northstar,
+      connectionId: northstarConnection,
+      systemType: "commerce",
+      resourceType: "order",
+      externalId: "gid://shopify/Order/1001",
+      canonicalType: "order",
+      canonicalId: "41111111-1111-4111-8111-111111111111",
+      metadata: {},
+      createdAt,
+      updatedAt: createdAt,
+    });
+    await handle.db.insert(externalReferences).values({
+      id: "82222222-2222-4222-8222-222222222221",
+      tenantId: DEMO_TENANTS.bluebird,
+      connectionId: bluebirdConnection,
+      systemType: "commerce",
+      resourceType: "order",
+      externalId: "gid://shopify/Order/1001",
+      canonicalType: "order",
+      canonicalId: "42222222-2222-4222-8222-222222222222",
+      metadata: {},
+      createdAt,
+      updatedAt: createdAt,
+    });
+    await expect(
+      handle.db.insert(externalReferences).values({
+        id: "83333333-3333-4333-8333-333333333333",
+        tenantId: DEMO_TENANTS.northstar,
+        connectionId: northstarConnection,
+        systemType: "commerce",
+        resourceType: "order",
+        externalId: "gid://shopify/Order/1001",
+        canonicalType: "order",
+        canonicalId: "43333333-3333-4333-8333-333333333333",
+        metadata: {},
+        createdAt,
+        updatedAt: createdAt,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      handle.db.insert(externalReferences).values({
+        id: "84444444-4444-4444-8444-444444444444",
+        tenantId: DEMO_TENANTS.northstar,
+        connectionId: bluebirdConnection,
+        systemType: "commerce",
+        resourceType: "order",
+        externalId: "gid://shopify/Order/1002",
+        canonicalType: "order",
+        canonicalId: "44444444-4444-4444-8444-444444444444",
+        metadata: {},
+        createdAt,
+        updatedAt: createdAt,
+      }),
+    ).rejects.toThrow();
   });
 });
