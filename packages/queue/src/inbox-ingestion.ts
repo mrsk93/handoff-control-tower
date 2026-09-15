@@ -100,7 +100,11 @@ export function createInboxIngestionService(dependencies: {
         { tenantId: input.tenantId },
         event,
         sha256Hex(input.rawBody),
-        ...(prerequisite ? [{ prerequisite }] : []),
+        {
+          ...(prerequisite ? { prerequisite } : {}),
+          signatureVerified: true,
+          signatureVerifiedAt: now,
+        },
       );
       return {
         messageId: result.message.messageId,

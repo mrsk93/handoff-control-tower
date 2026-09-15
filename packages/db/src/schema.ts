@@ -3,6 +3,7 @@ import {
   bigint,
   check,
   customType,
+  foreignKey,
   integer,
   jsonb,
   pgEnum,
@@ -51,6 +52,15 @@ export const outboxStatus = pgEnum("outbox_status", [
   "dispatching",
   "sent",
   "retry_wait",
+  "dead_letter",
+  "cancelled",
+]);
+export const syncOperationStatus = pgEnum("sync_operation_status", [
+  "pending",
+  "running",
+  "succeeded",
+  "retrying",
+  "failed",
   "dead_letter",
   "cancelled",
 ]);
@@ -185,6 +195,7 @@ export const inboxMessages = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
+    connectionId: uuid("connection_id"),
     sourceSystem: text("source_system").notNull(),
     messageId: text("message_id").notNull(),
     eventType: text("event_type").notNull(),
@@ -193,6 +204,10 @@ export const inboxMessages = pgTable(
     sourceVersion: text("source_version"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    sourceApiVersion: text("source_api_version"),
+    signatureVerified: boolean("signature_verified").notNull().default(false),
+    signatureVerifiedAt: timestamp("signature_verified_at", { withTimezone: true }),
     correlationId: text("correlation_id").notNull(),
     causationId: text("causation_id"),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -206,10 +221,17 @@ export const inboxMessages = pgTable(
     prerequisiteType: text("prerequisite_type"),
     prerequisiteKey: text("prerequisite_key"),
     processedAt: timestamp("processed_at", { withTimezone: true }),
+    lastAppliedEventId: text("last_applied_event_id"),
+    errorCode: text("error_code"),
     lastError: text("last_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
   (table) => [
+    foreignKey({
+      columns: [table.tenantId, table.connectionId],
+      foreignColumns: [connections.tenantId, connections.id],
+      name: "inbox_messages_tenant_connection_fk",
+    }),
     uniqueIndex("inbox_source_message_uq").on(table.tenantId, table.sourceSystem, table.messageId),
     uniqueIndex("inbox_idempotency_uq").on(table.tenantId, table.idempotencyKey),
     index("inbox_claim_idx").on(table.status, table.availableAt),
@@ -446,6 +468,110 @@ export const processInstances = pgTable(
   ],
 );
 
+export const syncOperations = pgTable(
+  "sync_operations",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    connectionId: uuid("connection_id"),
+    workflowType: text("workflow_type").notNull(),
+    aggregateType: text("aggregate_type").notNull(),
+    aggregateId: text("aggregate_id").notNull(),
+    direction: text("direction").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    status: syncOperationStatus("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    lastErrorMessage: text("last_error_message"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("sync_operations_tenant_idempotency_uq").on(table.tenantId, table.idempotencyKey),
+    uniqueIndex("sync_operations_tenant_id_uq").on(table.tenantId, table.id),
+    foreignKey({
+      columns: [table.tenantId, table.connectionId],
+      foreignColumns: [connections.tenantId, connections.id],
+      name: "sync_operations_tenant_connection_fk",
+    }),
+    index("sync_operations_claim_idx").on(table.status, table.nextAttemptAt),
+    index("sync_operations_aggregate_idx").on(
+      table.tenantId,
+      table.aggregateType,
+      table.aggregateId,
+      table.createdAt,
+    ),
+    index("sync_operations_tenant_idx").on(table.tenantId),
+    check("sync_operations_attempt_count_ck", sql`${table.attemptCount} >= 0`),
+    check(
+      "sync_operations_text_fields_ck",
+      sql`
+      length(trim(${table.workflowType})) > 0 and
+      length(trim(${table.aggregateType})) > 0 and
+      length(trim(${table.aggregateId})) > 0 and
+      length(trim(${table.direction})) > 0 and
+      length(trim(${table.idempotencyKey})) > 0
+    `,
+    ),
+  ],
+);
+
+export const syncAttempts = pgTable(
+  "sync_attempts",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    operationId: uuid("operation_id").notNull(),
+    attempt: integer("attempt").notNull(),
+    outcome: text("outcome").notNull(),
+    httpMethod: text("http_method"),
+    requestPath: text("request_path"),
+    statusCode: integer("status_code"),
+    requestId: text("request_id"),
+    retryAfterMs: integer("retry_after_ms"),
+    durationMs: integer("duration_ms"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("sync_attempts_tenant_operation_attempt_uq").on(
+      table.tenantId,
+      table.operationId,
+      table.attempt,
+    ),
+    foreignKey({
+      columns: [table.tenantId, table.operationId],
+      foreignColumns: [syncOperations.tenantId, syncOperations.id],
+      name: "sync_attempts_tenant_operation_fk",
+    }),
+    index("sync_attempts_tenant_created_idx").on(table.tenantId, table.createdAt),
+    index("sync_attempts_operation_idx").on(table.tenantId, table.operationId, table.createdAt),
+    check("sync_attempts_attempt_ck", sql`${table.attempt} >= 1`),
+    check(
+      "sync_attempts_status_code_ck",
+      sql`${table.statusCode} is null or (${table.statusCode} >= 100 and ${table.statusCode} <= 599)`,
+    ),
+    check(
+      "sync_attempts_retry_after_ck",
+      sql`${table.retryAfterMs} is null or ${table.retryAfterMs} >= 0`,
+    ),
+    check(
+      "sync_attempts_duration_ck",
+      sql`${table.durationMs} is null or ${table.durationMs} >= 0`,
+    ),
+  ],
+);
+
 export const outboxMessages = pgTable(
   "outbox_messages",
   {
@@ -453,6 +579,8 @@ export const outboxMessages = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
+    connectionId: uuid("connection_id"),
+    syncOperationId: uuid("sync_operation_id"),
     destination: text("destination").notNull(),
     messageType: text("message_type").notNull(),
     messageVersion: integer("message_version").notNull(),
@@ -465,6 +593,11 @@ export const outboxMessages = pgTable(
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     lockedBy: text("locked_by"),
     attemptCount: integer("attempt_count").notNull().default(0),
+    workflowType: text("workflow_type"),
+    aggregateType: text("aggregate_type"),
+    aggregateId: text("aggregate_id"),
+    providerApiVersion: text("provider_api_version"),
+    lastRequestId: text("last_request_id"),
     lastError: text("last_error"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
@@ -477,6 +610,17 @@ export const outboxMessages = pgTable(
     ),
     index("outbox_claim_idx").on(table.status, table.availableAt),
     index("outbox_tenant_idx").on(table.tenantId),
+    foreignKey({
+      columns: [table.tenantId, table.connectionId],
+      foreignColumns: [connections.tenantId, connections.id],
+      name: "outbox_messages_tenant_connection_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.syncOperationId],
+      foreignColumns: [syncOperations.tenantId, syncOperations.id],
+      name: "outbox_messages_tenant_operation_fk",
+    }),
+    index("outbox_sync_operation_idx").on(table.tenantId, table.syncOperationId),
   ],
 );
 
@@ -719,6 +863,8 @@ export const schema = {
   shipments,
   shipmentLines,
   processInstances,
+  syncOperations,
+  syncAttempts,
   outboxMessages,
   outboxDeliveryReceipts,
   exceptions,

@@ -74,6 +74,11 @@ describe.skipIf(!testDatabaseUrl)("inbox ingestion", () => {
       [DEMO_TENANTS.northstar, "duplicate-key-1"],
     );
     expect(count.rows[0]?.count).toBe("1");
+    const metadata = await handle.pool.query<{ signature_verified: boolean; observed_at: Date }>(
+      `select signature_verified, observed_at from inbox_messages where id = $1`,
+      [accepted.inboxId],
+    );
+    expect(metadata.rows[0]).toMatchObject({ signature_verified: true, observed_at: now });
     const claim = await service.repository.claimNext(
       { tenantId: DEMO_TENANTS.northstar },
       "duplicate-test-worker",

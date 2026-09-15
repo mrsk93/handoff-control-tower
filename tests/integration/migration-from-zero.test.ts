@@ -48,13 +48,13 @@ describe.skipIf(!testDatabaseUrl)("migration-from-zero", () => {
        ('tenants', 'connections', 'inbox_messages', 'outbox_messages', 'orders', 'order_lines',
         'fulfillments', 'fulfillment_lines', 'shipments', 'shipment_lines', 'process_instances',
         'exceptions', 'reconciliation_runs', 'reconciliation_findings', 'audit_events',
-        'external_references', 'catalog_items', 'customers')
+        'external_references', 'catalog_items', 'customers', 'sync_operations', 'sync_attempts')
        order by table_name`,
     );
     expect(applied.rows.map((row) => row.name)).toEqual(
       migrations.map((migration) => migration.name),
     );
-    expect(tables.rows).toHaveLength(18);
+    expect(tables.rows).toHaveLength(20);
     const connectionColumns = await handle.pool.query<{ column_name: string }>(
       `select column_name from information_schema.columns
        where table_schema = 'public' and table_name = 'connections' and column_name = 'environment'`,
@@ -70,6 +70,16 @@ describe.skipIf(!testDatabaseUrl)("migration-from-zero", () => {
         "external_references_tenant_connection_canonical_uq",
       ]),
     );
+    const operationColumns = await handle.pool.query<{ table_name: string; column_name: string }>(
+      `select table_name, column_name from information_schema.columns
+       where table_schema = 'public' and
+         ((table_name = 'inbox_messages' and column_name in ('connection_id', 'observed_at', 'signature_verified')) or
+          (table_name = 'outbox_messages' and column_name in ('sync_operation_id', 'last_request_id')) or
+          (table_name = 'sync_operations' and column_name in ('workflow_type', 'idempotency_key', 'status')) or
+          (table_name = 'sync_attempts' and column_name in ('operation_id', 'attempt', 'status_code')))
+       order by table_name, column_name`,
+    );
+    expect(operationColumns.rows).toHaveLength(11);
   });
 
   it("upgrades a legacy 0011 connection row without losing identity", async () => {

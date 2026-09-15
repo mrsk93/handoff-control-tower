@@ -51,6 +51,10 @@ export type InboxPrerequisite = {
 
 export type InboxIngestOptions = {
   prerequisite?: InboxPrerequisite;
+  connectionId?: string;
+  sourceApiVersion?: string;
+  signatureVerified?: boolean;
+  signatureVerifiedAt?: Date;
 };
 
 export type InboxIngestResult = {
@@ -140,6 +144,7 @@ export function createInboxRepository(db: Database) {
           .values({
             id: randomUUID(),
             tenantId: scoped.tenantId,
+            connectionId: options.connectionId ?? null,
             sourceSystem: event.sourceSystem,
             messageId: event.messageId,
             eventType: event.eventType,
@@ -148,6 +153,10 @@ export function createInboxRepository(db: Database) {
             sourceVersion: event.sourceVersion ?? null,
             occurredAt: new Date(event.occurredAt),
             receivedAt,
+            observedAt: new Date(event.observedAt),
+            sourceApiVersion: options.sourceApiVersion ?? null,
+            signatureVerified: options.signatureVerified ?? false,
+            signatureVerifiedAt: options.signatureVerifiedAt ?? null,
             correlationId: event.correlationId,
             causationId: event.causationId ?? null,
             idempotencyKey: event.idempotencyKey,
