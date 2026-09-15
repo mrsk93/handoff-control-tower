@@ -43,7 +43,17 @@ const fulfillmentStatuses = [
   "cancelled",
   "exception",
 ] as const;
-const shipmentStatuses = ["label_created", "shipped", "in_transit", "delivered", "voided"] as const;
+const shipmentStatuses = [
+  "label_created",
+  "shipped",
+  "in_transit",
+  "out_for_delivery",
+  "delivered",
+  "exception",
+  "on_hold",
+  "cancelled",
+  "voided",
+] as const;
 const integrationSystems = ["COMMERCE", "ERP", "WAREHOUSE", "CARRIER", "HANDOFF"] as const;
 const quantityUnits = ["EA", "KG", "LB", "CASE", "UNKNOWN"] as const;
 
@@ -431,8 +441,22 @@ export const fulfillmentActualSchema = schema<FulfillmentActual>((input) => {
     lines,
     version: positiveInteger(value, "version"),
   };
+  if (value.quantityEvidence !== undefined) {
+    fulfillment.quantityEvidence = enumValue(value, "quantityEvidence", [
+      "workflow",
+      "shipment_authoritative",
+    ] as const);
+  }
   const warehouseOrderId = optionalString(value, "warehouseOrderId");
   if (warehouseOrderId !== undefined) fulfillment.warehouseOrderId = warehouseOrderId;
+  for (const key of ["sourceVersion", "lastAppliedEventId"] as const) {
+    const parsed = optionalString(value, key);
+    if (parsed !== undefined) fulfillment[key] = parsed;
+  }
+  for (const key of ["occurredAt", "observedAt"] as const) {
+    const parsed = optionalInstant(value, key);
+    if (parsed !== undefined) fulfillment[key] = parsed;
+  }
   return fulfillment;
 });
 
@@ -456,6 +480,14 @@ export const shipmentSchema = schema<Shipment>((input) => {
     ["shippedAt", value.shippedAt === undefined ? undefined : instant(value, "shippedAt")],
   ] as const) {
     if (parser !== undefined) shipment[key] = parser;
+  }
+  for (const key of ["sourceVersion", "lastAppliedEventId"] as const) {
+    const parsed = optionalString(value, key);
+    if (parsed !== undefined) shipment[key] = parsed;
+  }
+  for (const key of ["occurredAt", "observedAt", "deliveredAt"] as const) {
+    const parsed = optionalInstant(value, key);
+    if (parsed !== undefined) shipment[key] = parsed;
   }
   return shipment;
 });

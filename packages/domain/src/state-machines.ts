@@ -6,6 +6,7 @@ import type {
   FulfillmentActual,
   FulfillmentLine,
   FulfillmentStatus,
+  OrderLifecycleStatus,
   OrderReleaseStatus,
 } from "./types";
 
@@ -22,6 +23,23 @@ export type OrderReleaseCommand = CommandMetadata &
     | { type: "commerce_cancelled" }
     | { type: "cancel_confirmed" }
     | { type: "cancel_failed" }
+  );
+
+export type OrderLifecycleCommand = CommandMetadata &
+  (
+    | { type: "erp_pending" }
+    | { type: "erp_created" }
+    | { type: "fulfillment_pending" }
+    | { type: "release_to_3pl" }
+    | { type: "partial_shipment_observed" }
+    | { type: "shipment_observed" }
+    | { type: "delivery_observed" }
+    | { type: "hold" }
+    | { type: "unblock" }
+    | { type: "request_cancel" }
+    | { type: "cancel_confirmed" }
+    | { type: "cancel_failed" }
+    | { type: "exception" }
   );
 
 export type FulfillmentCommand = CommandMetadata &
@@ -88,6 +106,104 @@ function duplicate<T>(state: T): TransitionResult<T> {
 
 function applied<T>(state: T, event: DomainEvent): TransitionResult<T> {
   return { state, events: [event], applied: true, duplicate: false };
+}
+
+function initialLifecycleStatus(order: CanonicalOrder): OrderLifecycleStatus {
+  if (order.lifecycleStatus !== undefined) return order.lifecycleStatus;
+  if (order.releaseStatus === "cancelled") return "cancelled";
+  if (order.releaseStatus === "exception") return "exception";
+  if (order.releaseStatus === "held") return "blocked";
+  return "received";
+}
+
+export function transitionOrderLifecycle(
+  order: CanonicalOrder,
+  command: OrderLifecycleCommand,
+  options: TransitionOptions = {},
+): TransitionResult<CanonicalOrder> {
+  assertCommandMetadata(command);
+  if (options.processedCommandKeys?.has(command.idempotencyKey)) return duplicate(order);
+
+  const previousStatus = initialLifecycleStatus(order);
+  if (command.type === "hold" || command.type === "cancel_failed" || command.type === "exception") {
+    assertReason(command, command.type);
+  }
+
+  let currentStatus: OrderLifecycleStatus;
+  switch (`${previousStatus}:${command.type}`) {
+    case "received:erp_pending":
+      currentStatus = "erp_pending";
+      break;
+    case "erp_pending:erp_created":
+      currentStatus = "erp_created";
+      break;
+    case "erp_created:fulfillment_pending":
+      currentStatus = "fulfillment_pending";
+      break;
+    case "fulfillment_pending:release_to_3pl":
+      currentStatus = "released_to_3pl";
+      break;
+    case "released_to_3pl:partial_shipment_observed":
+    case "partially_shipped:partial_shipment_observed":
+      currentStatus = "partially_shipped";
+      break;
+    case "released_to_3pl:shipment_observed":
+    case "partially_shipped:shipment_observed":
+      currentStatus = "shipped";
+      break;
+    case "shipped:delivery_observed":
+      currentStatus = "delivered";
+      break;
+    case "received:hold":
+    case "erp_pending:hold":
+    case "erp_created:hold":
+    case "fulfillment_pending:hold":
+    case "released_to_3pl:hold":
+    case "partially_shipped:hold":
+      currentStatus = "blocked";
+      break;
+    case "blocked:unblock":
+      currentStatus = "received";
+      break;
+    case "received:request_cancel":
+    case "erp_pending:request_cancel":
+    case "erp_created:request_cancel":
+    case "fulfillment_pending:request_cancel":
+    case "released_to_3pl:request_cancel":
+      currentStatus = "cancel_pending";
+      break;
+    case "cancel_pending:cancel_confirmed":
+      currentStatus = "cancelled";
+      break;
+    case "cancel_pending:cancel_failed":
+      currentStatus = "exception";
+      break;
+    case "released_to_3pl:exception":
+    case "partially_shipped:exception":
+    case "cancel_pending:exception":
+      currentStatus = "exception";
+      break;
+    default:
+      throw new InvalidTransitionError("order.lifecycle", previousStatus, command.type);
+  }
+
+  const state: CanonicalOrder = { ...order, lifecycleStatus: currentStatus };
+  if (currentStatus === "cancelled" && state.cancelledAt === undefined) {
+    state.cancelledAt = command.occurredAt;
+  }
+  const event = changedEvent(
+    command,
+    "order.lifecycle_changed",
+    order.tenantId,
+    "order",
+    order.orderId,
+    {
+      previousStatus,
+      currentStatus,
+      ...(command.reason === undefined ? {} : { reason: command.reason }),
+    },
+  );
+  return applied(state, event);
 }
 
 export function transitionOrderRelease(
@@ -322,5 +438,9 @@ export function transitionFulfillment(
 }
 
 export function isTerminalFulfillmentStatus(status: FulfillmentStatus): boolean {
-  return status === "shipped" || status === "cancelled";
+  return status === "shipped" || status === "delivered" || status === "cancelled";
+}
+
+export function isTerminalOrderLifecycleStatus(status: OrderLifecycleStatus): boolean {
+  return status === "delivered" || status === "cancelled";
 }

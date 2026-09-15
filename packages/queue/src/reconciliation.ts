@@ -177,6 +177,7 @@ function event(
     ...(sourceVersion === undefined ? {} : { sourceVersion }),
     occurredAt: now.toISOString(),
     receivedAt: now.toISOString(),
+    observedAt: now.toISOString(),
     correlationId: `reconciliation:${runId}`,
     causationId: runId,
     idempotencyKey: key,

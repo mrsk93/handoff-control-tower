@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   acceptCommerceOrder,
   applyWarehouseUpdate,
+  applyShipmentObservation,
   cancellationOutcome,
+  classifyFreshness,
   confirmShipment,
   initialFulfillment,
+  transitionOrderLifecycle,
   type CanonicalOrder,
   type FulfillmentActual,
   type FulfillmentLine,
@@ -151,5 +154,141 @@ describe("fulfillment process domain seam", () => {
       status: "conflict",
       exception: { code: "CANCEL_AFTER_SHIPMENT" },
     });
+  });
+
+  it("accepts direct shipment evidence without fabricating pick or pack stages", () => {
+    const order = makeOrder();
+    const initial = initialFulfillment(order);
+    const first = applyShipmentObservation(order, initial, {
+      shipmentId: "shipment-observation-1",
+      eventId: "ship-event-1",
+      sourceVersion: "1",
+      occurredAt,
+      observedAt: "2026-01-01T00:01:00.000Z",
+      carrierCode: "sandbox-carrier",
+      serviceCode: "ground",
+      trackingNumber: "TRACK-1",
+      lines: [{ lineId: "COM-A-1:line-1", quantity: 1 }],
+    });
+    expect(first.outcome).toBe("applied");
+    if (first.outcome !== "applied") throw new Error("expected direct shipment evidence to apply");
+    expect(first.fulfillment.status).toBe("partially_shipped");
+    expect(first.fulfillment.quantityEvidence).toBe("shipment_authoritative");
+    expect(first.fulfillment.lines[0]?.packedQty).toBe(0);
+    expect(first.order.lifecycleStatus).toBe("partially_shipped");
+
+    const second = applyShipmentObservation(first.order, first.fulfillment, {
+      shipmentId: "shipment-observation-2",
+      eventId: "ship-event-2",
+      sourceVersion: "2",
+      occurredAt: "2026-01-01T00:02:00.000Z",
+      observedAt: "2026-01-01T00:03:00.000Z",
+      carrierCode: "sandbox-carrier",
+      serviceCode: "ground",
+      trackingNumber: "TRACK-2",
+      lines: [
+        { lineId: "COM-A-1:line-1", quantity: 1 },
+        { lineId: "COM-A-1:line-2", quantity: 1 },
+      ],
+    });
+    expect(second.outcome).toBe("applied");
+    if (second.outcome !== "applied") throw new Error("expected second shipment evidence to apply");
+    expect(second.fulfillment.status).toBe("shipped");
+    expect(second.order.lifecycleStatus).toBe("shipped");
+    expect(
+      applyShipmentObservation(second.order, second.fulfillment, {
+        shipmentId: "shipment-observation-2",
+        eventId: "ship-event-2",
+        sourceVersion: "2",
+        occurredAt: "2026-01-01T00:02:00.000Z",
+        observedAt: "2026-01-01T00:03:00.000Z",
+        carrierCode: "sandbox-carrier",
+        serviceCode: "ground",
+        trackingNumber: "TRACK-2",
+        lines: [{ lineId: "COM-A-1:line-2", quantity: 1 }],
+      }).outcome,
+    ).toBe("duplicate");
+    expect(
+      applyShipmentObservation(second.order, second.fulfillment, {
+        shipmentId: "shipment-observation-old",
+        eventId: "ship-event-old",
+        sourceVersion: "1",
+        occurredAt: "2026-01-01T00:01:00.000Z",
+        observedAt: "2026-01-01T00:01:30.000Z",
+        carrierCode: "sandbox-carrier",
+        serviceCode: "ground",
+        trackingNumber: "TRACK-old",
+        lines: [{ lineId: "COM-A-1:line-2", quantity: 1 }],
+      }).outcome,
+    ).toBe("stale");
+    expect(
+      applyShipmentObservation(second.order, second.fulfillment, {
+        shipmentId: "shipment-observation-conflict",
+        eventId: "ship-event-conflict",
+        sourceVersion: "2",
+        occurredAt: "2026-01-01T00:02:00.000Z",
+        observedAt: "2026-01-01T00:03:00.000Z",
+        carrierCode: "sandbox-carrier",
+        serviceCode: "ground",
+        trackingNumber: "TRACK-conflict",
+        lines: [{ lineId: "COM-A-1:line-2", quantity: 1 }],
+      }).outcome,
+    ).toBe("conflict");
+  });
+
+  it("keeps lifecycle transitions explicit and guards cancellation after shipment", () => {
+    const order = makeOrder();
+    const pending = transitionOrderLifecycle(order, {
+      type: "erp_pending",
+      idempotencyKey: "life-1",
+      occurredAt,
+    }).state;
+    const created = transitionOrderLifecycle(pending, {
+      type: "erp_created",
+      idempotencyKey: "life-2",
+      occurredAt,
+    }).state;
+    const ready = transitionOrderLifecycle(created, {
+      type: "fulfillment_pending",
+      idempotencyKey: "life-3",
+      occurredAt,
+    }).state;
+    const released = transitionOrderLifecycle(ready, {
+      type: "release_to_3pl",
+      idempotencyKey: "life-4",
+      occurredAt,
+    }).state;
+    const shipped = transitionOrderLifecycle(released, {
+      type: "shipment_observed",
+      idempotencyKey: "life-5",
+      occurredAt,
+    }).state;
+    const delivered = transitionOrderLifecycle(shipped, {
+      type: "delivery_observed",
+      idempotencyKey: "life-6",
+      occurredAt,
+    }).state;
+    expect(delivered.lifecycleStatus).toBe("delivered");
+    expect(() =>
+      transitionOrderLifecycle(shipped, {
+        type: "request_cancel",
+        idempotencyKey: "life-cancel",
+        occurredAt,
+      }),
+    ).toThrow("Cannot apply request_cancel");
+  });
+
+  it("classifies replay, stale, and equal-freshness observations explicitly", () => {
+    const current = {
+      eventId: "event-2",
+      sourceVersion: "2",
+      occurredAt,
+      observedAt: "2026-01-01T00:02:00.000Z",
+    };
+    expect(classifyFreshness({ ...current }, current)).toBe("duplicate");
+    expect(classifyFreshness({ ...current, eventId: "event-1", sourceVersion: "1" }, current)).toBe(
+      "stale",
+    );
+    expect(classifyFreshness({ ...current, eventId: "event-3" }, current)).toBe("ambiguous");
   });
 });

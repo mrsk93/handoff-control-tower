@@ -1,6 +1,20 @@
 export type OrderReleaseStatus =
   "pending" | "released" | "held" | "cancel_requested" | "cancelled" | "exception";
 
+export type OrderLifecycleStatus =
+  | "received"
+  | "erp_pending"
+  | "erp_created"
+  | "fulfillment_pending"
+  | "released_to_3pl"
+  | "partially_shipped"
+  | "shipped"
+  | "delivered"
+  | "cancel_pending"
+  | "cancelled"
+  | "blocked"
+  | "exception";
+
 export type IntegrationSystem = "COMMERCE" | "ERP" | "WAREHOUSE" | "CARRIER" | "HANDOFF";
 export type UnitOfMeasure = "EA" | "KG" | "LB" | "CASE" | "UNKNOWN";
 
@@ -84,16 +98,28 @@ export type InventoryBalance = {
 export type FulfillmentStatus =
   | "not_sent"
   | "sent"
+  | "accepted"
   | "acknowledged"
   | "picking"
   | "packed"
+  | "on_hold"
   | "partially_shipped"
   | "shipped"
+  | "delivered"
   | "cancel_requested"
   | "cancelled"
   | "exception";
 
-export type ShipmentStatus = "label_created" | "shipped" | "in_transit" | "delivered" | "voided";
+export type ShipmentStatus =
+  | "label_created"
+  | "shipped"
+  | "in_transit"
+  | "out_for_delivery"
+  | "delivered"
+  | "exception"
+  | "on_hold"
+  | "cancelled"
+  | "voided";
 
 export type CanonicalOrderLine = {
   lineId: string;
@@ -136,6 +162,7 @@ export type CanonicalOrder = {
   observedAt?: string;
   sourceSystem?: IntegrationSystem;
   lastAppliedEventId?: string;
+  lifecycleStatus?: OrderLifecycleStatus;
   releaseStatus: OrderReleaseStatus;
   lines: CanonicalOrderLine[];
 };
@@ -157,6 +184,11 @@ export type FulfillmentActual = {
   status: FulfillmentStatus;
   lines: FulfillmentLine[];
   version: number;
+  quantityEvidence?: "workflow" | "shipment_authoritative";
+  sourceVersion?: string;
+  occurredAt?: string;
+  observedAt?: string;
+  lastAppliedEventId?: string;
 };
 
 export type ShipmentLine = {
@@ -174,6 +206,11 @@ export type Shipment = {
   trackingNumber: string;
   trackingUrl?: string;
   shippedAt?: string;
+  deliveredAt?: string;
+  sourceVersion?: string;
+  occurredAt?: string;
+  observedAt?: string;
+  lastAppliedEventId?: string;
   lines: ShipmentLine[];
   status: ShipmentStatus;
 };

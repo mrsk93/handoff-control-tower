@@ -10,6 +10,8 @@ export type IntegrationEvent<TPayload = unknown> = {
   sourceVersion?: string;
   occurredAt: string;
   receivedAt: string;
+  observedAt: string;
+  lastAppliedEventId?: string;
   correlationId: string;
   causationId?: string;
   idempotencyKey: string;
@@ -20,7 +22,46 @@ export type IntegrationEventContext = {
   tenantId: string;
   sourceSystem: string;
   receivedAt: string;
+  observedAt?: string;
 };
+
+export type FreshnessDecision = "new" | "stale" | "duplicate" | "ambiguous";
+
+export type FreshnessObservation = {
+  eventId: string;
+  occurredAt: string;
+  observedAt: string;
+  sourceVersion?: string;
+};
+
+export type FreshnessState = FreshnessObservation;
+
+function compareVersions(left: string, right: string): number {
+  if (/^\d+$/.test(left) && /^\d+$/.test(right)) {
+    const a = BigInt(left);
+    const b = BigInt(right);
+    return a === b ? 0 : a < b ? -1 : 1;
+  }
+  return left === right ? 0 : left < right ? -1 : 1;
+}
+
+/** Classifies replay, reordering, and equal-freshness observations explicitly. */
+export function classifyFreshness(
+  incoming: FreshnessObservation,
+  current?: FreshnessState,
+): FreshnessDecision {
+  if (current === undefined) return "new";
+  if (incoming.eventId === current.eventId) return "duplicate";
+  if (incoming.sourceVersion !== undefined && current.sourceVersion !== undefined) {
+    const comparison = compareVersions(incoming.sourceVersion, current.sourceVersion);
+    if (comparison < 0) return "stale";
+    if (comparison === 0) return "ambiguous";
+    return "new";
+  }
+  if (incoming.observedAt < current.observedAt) return "stale";
+  if (incoming.observedAt === current.observedAt) return "ambiguous";
+  return "new";
+}
 
 function objectRecord(input: unknown): Record<string, unknown> {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
@@ -71,6 +112,15 @@ export function normalizeIntegrationEvent<TPayload = unknown>(
   context: IntegrationEventContext,
 ): IntegrationEvent<TPayload> {
   const value = objectRecord(input);
+  const observedAt = context.observedAt ?? context.receivedAt;
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(observedAt) ||
+    Number.isNaN(Date.parse(observedAt))
+  ) {
+    throw new SchemaValidationError([
+      { path: "observedAt", message: "must be an ISO-8601 UTC instant" },
+    ]);
+  }
   const messageId = requiredString(value, "messageId");
   const bodyTenantId = value.tenantId;
   if (bodyTenantId !== undefined && bodyTenantId !== context.tenantId) {
@@ -88,6 +138,7 @@ export function normalizeIntegrationEvent<TPayload = unknown>(
     sourceEntityId: requiredString(value, "sourceEntityId"),
     occurredAt: utcInstant(value, "occurredAt"),
     receivedAt: context.receivedAt,
+    observedAt,
     correlationId: optionalString(value, "correlationId") ?? `${context.sourceSystem}:${messageId}`,
     idempotencyKey:
       optionalString(value, "idempotencyKey") ?? `${context.sourceSystem}:${messageId}`,

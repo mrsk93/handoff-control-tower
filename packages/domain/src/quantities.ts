@@ -89,7 +89,10 @@ export function assertFulfillmentQuantityInvariants(
         `fulfillment.lines.${line.lineId}.packedQty`,
       );
     }
-    if (line.shippedQty > line.packedQty) {
+    if (
+      fulfillment.quantityEvidence !== "shipment_authoritative" &&
+      line.shippedQty > line.packedQty
+    ) {
       throw new InvariantViolationError(
         "shipped quantity cannot exceed packed quantity",
         `fulfillment.lines.${line.lineId}.shippedQty`,

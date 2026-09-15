@@ -2,11 +2,15 @@ import type {
   CanonicalOrder,
   FulfillmentStatus,
   InvoiceEligibilityDecision,
+  OrderLifecycleStatus,
   OrderReleaseStatus,
 } from "./types";
 
 export type DomainEventType =
-  "order.release_changed" | "fulfillment.status_changed" | "invoice.eligibility_determined";
+  | "order.release_changed"
+  | "order.lifecycle_changed"
+  | "fulfillment.status_changed"
+  | "invoice.eligibility_determined";
 
 export type DomainEvent = {
   eventId: string;
@@ -21,6 +25,12 @@ export type DomainEvent = {
 export type OrderReleaseChangedPayload = {
   previousStatus: OrderReleaseStatus;
   currentStatus: OrderReleaseStatus;
+  reason?: string;
+};
+
+export type OrderLifecycleChangedPayload = {
+  previousStatus: OrderLifecycleStatus;
+  currentStatus: OrderLifecycleStatus;
   reason?: string;
 };
 

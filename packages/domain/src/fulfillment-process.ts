@@ -1,5 +1,5 @@
 import { InvariantViolationError } from "./errors";
-import { assertFulfillmentQuantityInvariants } from "./quantities";
+import { assertFulfillmentQuantityInvariants, totalNonCancelledQuantity } from "./quantities";
 import { normalizeSku } from "./value-objects";
 import type {
   CanonicalOrder,
@@ -9,6 +9,7 @@ import type {
   FulfillmentStatus,
   Shipment,
   ShipmentLine,
+  ShipmentStatus,
 } from "./types";
 
 export type FulfillmentProcessException = {
@@ -61,6 +62,9 @@ export type WarehouseFulfillmentUpdate = {
   status: WarehouseUpdateStatus;
   lines: FulfillmentLine[];
   correction?: boolean;
+  occurredAt?: string;
+  observedAt?: string;
+  lastAppliedEventId?: string;
 };
 
 export type WarehouseUpdateResult =
@@ -80,8 +84,40 @@ export type ShipmentConfirmationInput = {
   trackingNumber: string;
   trackingUrl?: string;
   shippedAt?: string;
+  deliveredAt?: string;
+  status?: ShipmentStatus;
+  sourceVersion?: string;
+  occurredAt?: string;
+  observedAt?: string;
+  lastAppliedEventId?: string;
   lines: ShipmentLine[];
 };
+
+export type ShipmentObservationInput = Omit<
+  ShipmentConfirmationInput,
+  "status" | "sourceVersion" | "occurredAt" | "observedAt"
+> & {
+  eventId: string;
+  occurredAt: string;
+  observedAt: string;
+  sourceVersion?: string;
+  status?: "shipped" | "delivered";
+};
+
+export type ShipmentObservationResult =
+  | {
+      outcome: "applied";
+      order: CanonicalOrder;
+      fulfillment: FulfillmentActual;
+      shipment: Shipment;
+    }
+  | { outcome: "stale" | "duplicate"; order: CanonicalOrder; fulfillment: FulfillmentActual }
+  | {
+      outcome: "conflict";
+      order: CanonicalOrder;
+      fulfillment: FulfillmentActual;
+      exception: FulfillmentProcessException;
+    };
 
 export type CancellationRemoteResult = "cancelled" | "already_shipped" | "rejected";
 
@@ -168,6 +204,7 @@ export function acceptCommerceOrder(
     orderNumber: input.orderNumber,
     currency: input.currency.toUpperCase(),
     acceptedAt: input.acceptedAt,
+    lifecycleStatus: input.cancelled ? "cancelled" : exceptions.length > 0 ? "blocked" : "received",
     releaseStatus: input.cancelled ? "cancelled" : "pending",
     lines,
   };
@@ -294,8 +331,15 @@ export function applyWarehouseUpdate(
     ...current,
     warehouseOrderId: update.warehouseOrderId,
     status: statusForWarehouseUpdate(update.status, lines),
+    quantityEvidence: "workflow",
     lines: lines.map((line) => ({ ...line })),
     version: current.version + 1,
+    ...(update.sourceVersion === undefined ? {} : { sourceVersion: update.sourceVersion }),
+    ...(update.occurredAt === undefined ? {} : { occurredAt: update.occurredAt }),
+    ...(update.observedAt === undefined ? {} : { observedAt: update.observedAt }),
+    ...(update.lastAppliedEventId === undefined
+      ? {}
+      : { lastAppliedEventId: update.lastAppliedEventId }),
   };
   try {
     assertFulfillmentQuantityInvariants(order, candidate);
@@ -312,6 +356,198 @@ export function applyWarehouseUpdate(
     };
   }
   return { outcome: "applied", fulfillment: candidate };
+}
+
+function assertUtcInstant(value: string, path: string): void {
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) ||
+    Number.isNaN(Date.parse(value))
+  ) {
+    throw new InvariantViolationError(`${path} must be an ISO-8601 UTC instant`, path);
+  }
+}
+
+function observationFreshness(
+  current: FulfillmentActual,
+  input: ShipmentObservationInput,
+): "apply" | "stale" | "duplicate" | "conflict" {
+  if (current.lastAppliedEventId === input.eventId) return "duplicate";
+  if (current.sourceVersion !== undefined && input.sourceVersion !== undefined) {
+    const comparison = compareSourceVersions(input.sourceVersion, current.sourceVersion);
+    if (comparison < 0) return "stale";
+    if (comparison === 0) return "conflict";
+    return "apply";
+  }
+  if (current.observedAt !== undefined) {
+    if (input.observedAt < current.observedAt) return "stale";
+    if (input.observedAt === current.observedAt) return "conflict";
+  }
+  return "apply";
+}
+
+/**
+ * Applies shipment evidence directly. Provider APIs may report shipped or
+ * delivered without exposing pick/pack stages; this path records only the
+ * authoritative shipment quantities and never fabricates those stages.
+ */
+export function applyShipmentObservation(
+  order: CanonicalOrder,
+  current: FulfillmentActual,
+  input: ShipmentObservationInput,
+): ShipmentObservationResult {
+  if (!input.eventId.trim()) {
+    throw new InvariantViolationError("shipment observation eventId is required");
+  }
+  assertUtcInstant(input.occurredAt, "shipment.occurredAt");
+  assertUtcInstant(input.observedAt, "shipment.observedAt");
+  const freshness = observationFreshness(current, input);
+  if (freshness === "stale" || freshness === "duplicate") {
+    return { outcome: freshness, order, fulfillment: current };
+  }
+  if (freshness === "conflict") {
+    return {
+      outcome: "conflict",
+      order,
+      fulfillment: current,
+      exception: {
+        code: "COMMERCE_REVISION_CONFLICT",
+        severity: "high",
+        summary: "shipment observations have equal freshness but different event identity",
+        evidenceRefs: [input.shipmentId, input.eventId, input.sourceVersion ?? input.observedAt],
+      },
+    };
+  }
+  if (order.releaseStatus === "cancelled" || order.lifecycleStatus === "cancelled") {
+    return {
+      outcome: "conflict",
+      order,
+      fulfillment: current,
+      exception: {
+        code: "CANCEL_AFTER_SHIPMENT",
+        severity: "high",
+        summary: "shipment evidence arrived after cancellation was confirmed",
+        evidenceRefs: [input.shipmentId, input.eventId],
+      },
+    };
+  }
+
+  const orderLines = new Map(order.lines.map((line) => [line.lineId, line]));
+  const currentLines = new Map(current.lines.map((line) => [line.lineId, line]));
+  const seen = new Set<string>();
+  for (const line of input.lines) {
+    if (seen.has(line.lineId)) {
+      return {
+        outcome: "conflict",
+        order,
+        fulfillment: current,
+        exception: {
+          code: "INVALID_QUANTITY",
+          severity: "high",
+          lineId: line.lineId,
+          summary: "shipment observation contains duplicate line evidence",
+          evidenceRefs: [input.shipmentId, line.lineId],
+        },
+      };
+    }
+    seen.add(line.lineId);
+    positiveInteger(line.quantity, `shipment.lines.${line.lineId}.quantity`);
+    const orderLine = orderLines.get(line.lineId);
+    const currentLine = currentLines.get(line.lineId);
+    if (orderLine === undefined || currentLine === undefined) {
+      return {
+        outcome: "conflict",
+        order,
+        fulfillment: current,
+        exception: {
+          code: "INVALID_QUANTITY",
+          severity: "high",
+          lineId: line.lineId,
+          summary: "shipment observation references an unknown order line",
+          evidenceRefs: [input.shipmentId, line.lineId],
+        },
+      };
+    }
+    const max = orderLine.orderedQty - orderLine.cancelledQty;
+    if (currentLine.shippedQty + line.quantity > max) {
+      return {
+        outcome: "conflict",
+        order,
+        fulfillment: current,
+        exception: {
+          code: "INVALID_QUANTITY",
+          severity: "high",
+          lineId: line.lineId,
+          summary: "shipment observation exceeds non-cancelled order quantity",
+          evidenceRefs: [input.shipmentId, line.lineId],
+        },
+      };
+    }
+  }
+  if (input.lines.length === 0) {
+    throw new InvariantViolationError("shipment observation must contain a positive quantity");
+  }
+
+  const nextLines = current.lines.map((line) => {
+    const observed = input.lines.find((candidate) => candidate.lineId === line.lineId);
+    return observed === undefined
+      ? { ...line }
+      : { ...line, shippedQty: line.shippedQty + observed.quantity };
+  });
+  const totalOrdered = totalNonCancelledQuantity(order);
+  const totalShipped = nextLines.reduce((sum, line) => sum + line.shippedQty, 0);
+  if (input.status === "delivered" && totalShipped < totalOrdered) {
+    return {
+      outcome: "conflict",
+      order,
+      fulfillment: current,
+      exception: {
+        code: "INVALID_QUANTITY",
+        severity: "high",
+        summary: "delivered evidence cannot precede complete shipment quantity",
+        evidenceRefs: [input.shipmentId, input.eventId],
+      },
+    };
+  }
+  const status: FulfillmentStatus = totalShipped >= totalOrdered ? "shipped" : "partially_shipped";
+  const nextFulfillment: FulfillmentActual = {
+    ...current,
+    status: input.status === "delivered" ? "delivered" : status,
+    quantityEvidence: "shipment_authoritative",
+    lines: nextLines,
+    version: current.version + 1,
+    ...(input.sourceVersion === undefined ? {} : { sourceVersion: input.sourceVersion }),
+    occurredAt: input.occurredAt,
+    observedAt: input.observedAt,
+    lastAppliedEventId: input.eventId,
+  };
+  const shipment: Shipment = {
+    tenantId: order.tenantId,
+    shipmentId: input.shipmentId,
+    orderId: order.orderId,
+    ...(input.externalShipmentId === undefined
+      ? {}
+      : { externalShipmentId: input.externalShipmentId }),
+    carrierCode: input.carrierCode,
+    serviceCode: input.serviceCode,
+    trackingNumber: input.trackingNumber,
+    ...(input.trackingUrl === undefined ? {} : { trackingUrl: input.trackingUrl }),
+    ...(input.shippedAt === undefined ? {} : { shippedAt: input.shippedAt }),
+    ...(input.deliveredAt === undefined ? {} : { deliveredAt: input.deliveredAt }),
+    ...(input.sourceVersion === undefined ? {} : { sourceVersion: input.sourceVersion }),
+    occurredAt: input.occurredAt,
+    observedAt: input.observedAt,
+    lastAppliedEventId: input.eventId,
+    lines: input.lines.map((line) => ({ ...line })),
+    status: input.status ?? "shipped",
+  };
+  const lifecycleStatus: CanonicalOrder["lifecycleStatus"] =
+    input.status === "delivered"
+      ? "delivered"
+      : order.lifecycleStatus === "delivered" || order.lifecycleStatus === "shipped"
+        ? order.lifecycleStatus
+        : status;
+  const nextOrder: CanonicalOrder = { ...order, lifecycleStatus };
+  return { outcome: "applied", order: nextOrder, fulfillment: nextFulfillment, shipment };
 }
 
 export function confirmShipment(
