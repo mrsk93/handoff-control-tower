@@ -8,6 +8,7 @@ export * from "./reconciliation-repository";
 export * from "./reconciliation-data-repository";
 export * from "./operator-repository";
 export * from "./schema";
+export * from "./sync-operation-repository";
 export * from "./seed";
 export * from "./tenant-context";
 export * from "./transaction";
