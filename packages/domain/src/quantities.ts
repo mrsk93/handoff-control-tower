@@ -1,12 +1,14 @@
 import { InvariantViolationError, InvalidQuantityError } from "./errors";
+import { exactQuantity } from "./value-objects";
 import type {
   CanonicalOrder,
   CanonicalOrderLine,
   FulfillmentActual,
   FulfillmentLine,
+  Quantity,
 } from "./types";
 
-export type Quantity = number & { readonly __quantityBrand: unique symbol };
+export type { Quantity, UnitOfMeasure } from "./types";
 
 export type FulfillmentQuantityOptions = {
   allowAllocationOverage?: boolean;
@@ -14,7 +16,7 @@ export type FulfillmentQuantityOptions = {
 
 export function quantity(value: number, path = "quantity"): Quantity {
   assertNonNegativeInteger(value, path);
-  return value as Quantity;
+  return exactQuantity(value, "EA", path);
 }
 
 export function assertNonNegativeInteger(value: number, path: string): asserts value is number {

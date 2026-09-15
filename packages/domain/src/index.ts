@@ -11,6 +11,7 @@ export * from "./reconciliation";
 export * from "./schemas";
 export * from "./state-machines";
 export * from "./types";
+export * from "./value-objects";
 
 export type TenantId = string;
 

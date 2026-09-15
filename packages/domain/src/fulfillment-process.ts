@@ -1,5 +1,6 @@
 import { InvariantViolationError } from "./errors";
 import { assertFulfillmentQuantityInvariants } from "./quantities";
+import { normalizeSku } from "./value-objects";
 import type {
   CanonicalOrder,
   CanonicalOrderLine,
@@ -152,7 +153,7 @@ export function acceptCommerceOrder(
     lines.push({
       lineId: stableLineId(input.sourceOrderId, line.sourceLineId),
       sourceLineId: line.sourceLineId,
-      sku: line.sku.trim(),
+      sku: normalizeSku(line.sku),
       orderedQty: line.quantity,
       cancelledQty,
     });

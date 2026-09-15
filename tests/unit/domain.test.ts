@@ -1,17 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  addressSchema,
   canonicalOrderSchema,
+  exactQuantity,
   createInvoiceEligibilityEvent,
+  externalRefSchema,
   evaluateInvoiceEligibility,
   fulfillmentActualSchema,
   InvalidTransitionError,
   InvariantViolationError,
+  money,
+  parseMoneyValue,
+  serializeMoney,
   transitionFulfillment,
   transitionOrderRelease,
   type CanonicalOrder,
   type FulfillmentActual,
   type FulfillmentLine,
   type InvoiceEligibilityInput,
+  normalizeSku,
 } from "@handoff/domain";
 
 const occurredAt = "2026-01-01T00:00:00.000Z";
@@ -94,6 +101,57 @@ function makeInput(overrides: Partial<InvoiceEligibilityInput> = {}): InvoiceEli
     ...overrides,
   };
 }
+
+describe("canonical value objects", () => {
+  it("normalizes SKU values deterministically and preserves opaque Shopify IDs", () => {
+    expect(normalizeSku("  Ｓku-1\t")).toBe("SKU-1");
+    const parsed = canonicalOrderSchema.parse({
+      ...makeOrder(),
+      lines: [{ ...makeOrder().lines[0], sku: "  Ｓku-1\t" }],
+    });
+    expect(parsed.lines[0]?.sku).toBe("SKU-1");
+    expect(
+      externalRefSchema.parse({
+        system: "COMMERCE",
+        resource: "product_variant",
+        id: "gid://shopify/ProductVariant/123",
+      }).id,
+    ).toBe("gid://shopify/ProductVariant/123");
+  });
+
+  it("represents exact quantities and rejects unsupported EA decimals", () => {
+    expect(exactQuantity("1.25", "KG")).toEqual({ value: "1.25", unit: "KG" });
+    expect(() => exactQuantity("1.25", "EA")).toThrow("must be an integer when unit is EA");
+    expect(() => exactQuantity("1", "UNKNOWN")).toThrow("must identify a supported unit");
+  });
+
+  it("round-trips minor-unit money through JSON-safe strings", () => {
+    const original = money("12345678901234567890", "usd");
+    const serialized = serializeMoney(original);
+    expect(serialized).toEqual({ amountMinor: "12345678901234567890", currency: "USD" });
+    expect(parseMoneyValue(serialized)).toEqual(original);
+    expect(() => money(1.5, "USD")).toThrow("amountMinor must be an integer");
+  });
+
+  it("rejects incomplete or invalid addresses at the runtime schema seam", () => {
+    expect(
+      addressSchema.safeParse({
+        address1: "1 Main Street",
+        city: "Toronto",
+        postalCode: "M5V 1A1",
+        countryCode: "CAN",
+      }),
+    ).toMatchObject({ success: false });
+    expect(
+      addressSchema.safeParse({
+        address1: "1 Main Street",
+        city: "Toronto",
+        postalCode: "M5V 1A1",
+        countryCode: "CA",
+      }),
+    ).toMatchObject({ success: true });
+  });
+});
 
 describe("M2 domain schemas and invariants", () => {
   it("parses canonical aggregates and rejects invalid quantities at the runtime seam", () => {
