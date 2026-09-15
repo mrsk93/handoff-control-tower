@@ -47,3 +47,15 @@ _Avoid_: production proof, customer case study
 **Eligibility event**:
 A guarded readiness signal derived by the Control Tower and sent to billing without creating an accounting invoice.
 _Avoid_: invoice, billing transaction
+
+**External reference**:
+A tenant- and connection-scoped link from a canonical record to an opaque provider resource identifier.
+_Avoid_: provider ID without a tenant or connection
+
+**Business idempotency key**:
+A stable key for one intended effect on one canonical aggregate and semantic revision. It protects a remote write from duplicate retries; it does not claim exactly-once transport.
+_Avoid_: request UUID, display name
+
+**Inventory evidence**:
+A provider-specific snapshot of available, reserved, or fulfilled quantity with its unit, version, and observed time.
+_Avoid_: silently merged stock balance
