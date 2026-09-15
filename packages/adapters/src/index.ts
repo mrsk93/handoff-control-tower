@@ -14,3 +14,4 @@ export * from "./mock-runtime";
 export * from "./mock-suite";
 export * from "./redis-rate-limit-store";
 export * from "./mock-warehouse";
+export * from "./http/transport";
