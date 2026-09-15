@@ -8,6 +8,7 @@
     "@handoff/config": "workspace:*",
     "@handoff/db": "workspace:*",
     "@handoff/domain": "workspace:*",
-    "@handoff/observability": "workspace:*"
+    "@handoff/observability": "workspace:*",
+    "@handoff/security": "workspace:*"
   }
 }

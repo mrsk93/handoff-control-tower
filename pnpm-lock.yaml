@@ -141,6 +141,9 @@ importers:
       '@handoff/observability':
         specifier: workspace:*
         version: link:../observability
+      '@handoff/security':
+        specifier: workspace:*
+        version: link:../security
 
   packages/scenarios:
     dependencies:

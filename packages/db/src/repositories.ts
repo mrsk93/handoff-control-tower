@@ -48,7 +48,21 @@ export type InboxIngestOptions = {
   sourceApiVersion?: string;
   signatureVerified?: boolean;
   signatureVerifiedAt?: Date;
+  payloadRedacted?: unknown;
 };
+
+export class InboxPayloadConflictError extends Error {
+  readonly code = "INBOX_PAYLOAD_CONFLICT";
+
+  constructor(
+    readonly inboxId: string,
+    readonly existingPayloadSha256: string,
+    readonly incomingPayloadSha256: string,
+  ) {
+    super("delivery was already recorded with a different payload hash");
+    this.name = "InboxPayloadConflictError";
+  }
+}
 
 export type InboxIngestResult = {
   duplicate: boolean;
@@ -68,6 +82,15 @@ export type InboxFailure = {
   retryAt: Date;
   maxAttempts: number;
 };
+
+type InboxIngestTransactionResult =
+  | { conflict: false; result: InboxIngestResult }
+  | {
+      conflict: true;
+      inboxId: string;
+      existingPayloadSha256: string;
+      incomingPayloadSha256: string;
+    };
 
 function isOlderSourceVersion(incoming: string, known: string): boolean {
   if (/^\d+$/.test(incoming) && /^\d+$/.test(known)) {
@@ -101,7 +124,7 @@ export function createInboxRepository(db: Database) {
       options: InboxIngestOptions = {},
     ): Promise<InboxIngestResult> {
       const scoped = requireTenantContext(context.tenantId);
-      return db.transaction(async (transaction) => {
+      const result = await db.transaction<InboxIngestTransactionResult>(async (transaction) => {
         const tenantRows = await transaction
           .select({ id: tenants.id })
           .from(tenants)
@@ -130,7 +153,11 @@ export function createInboxRepository(db: Database) {
         const missingPrerequisite =
           options.prerequisite !== undefined &&
           !(await prerequisiteExists(transaction, scoped.tenantId, options.prerequisite));
-        const status = stale ? "ignored" : missingPrerequisite ? "parked" : "received";
+        const status: InboxIngestResult["status"] = stale
+          ? "ignored"
+          : missingPrerequisite
+            ? "parked"
+            : "received";
         const terminal = status === "ignored";
         const inserted = await transaction
           .insert(inboxMessages)
@@ -153,7 +180,7 @@ export function createInboxRepository(db: Database) {
             correlationId: event.correlationId,
             causationId: event.causationId ?? null,
             idempotencyKey: event.idempotencyKey,
-            payload: event.payload,
+            payload: options.payloadRedacted ?? event.payload,
             payloadSha256,
             status,
             attemptCount: 0,
@@ -174,7 +201,10 @@ export function createInboxRepository(db: Database) {
           .returning();
 
         if (inserted[0]) {
-          return { duplicate: false, status, stale, message: inserted[0] };
+          return {
+            conflict: false,
+            result: { duplicate: false, status, stale, message: inserted[0] },
+          };
         }
 
         const existing = await transaction
@@ -194,18 +224,87 @@ export function createInboxRepository(db: Database) {
           )
           .limit(1);
         if (!existing[0]) throw new Error("inbox conflict did not return the existing message");
+        if (existing[0].payloadSha256 !== payloadSha256) {
+          return {
+            conflict: true as const,
+            inboxId: existing[0].id,
+            existingPayloadSha256: existing[0].payloadSha256,
+            incomingPayloadSha256: payloadSha256,
+          };
+        }
         return {
-          duplicate: true,
-          status:
-            existing[0].status === "parked"
-              ? "parked"
-              : existing[0].status === "ignored"
-                ? "ignored"
-                : "received",
-          stale: existing[0].status === "ignored",
-          message: existing[0],
+          conflict: false,
+          result: {
+            duplicate: true,
+            status:
+              existing[0].status === "parked"
+                ? "parked"
+                : existing[0].status === "ignored"
+                  ? "ignored"
+                  : "received",
+            stale: existing[0].status === "ignored",
+            message: existing[0],
+          },
         };
       });
+      if (result.conflict) {
+        await db
+          .update(inboxMessages)
+          .set({
+            errorCode: "INBOX_PAYLOAD_CONFLICT",
+            lastError: "delivery payload hash conflict",
+          })
+          .where(
+            and(eq(inboxMessages.id, result.inboxId), eq(inboxMessages.tenantId, scoped.tenantId)),
+          );
+        throw new InboxPayloadConflictError(
+          result.inboxId,
+          result.existingPayloadSha256,
+          result.incomingPayloadSha256,
+        );
+      }
+      return result.result;
+    },
+
+    async findByDelivery(
+      context: TenantContext,
+      sourceSystem: string,
+      messageId: string,
+    ): Promise<InboxClaim | null> {
+      const scoped = requireTenantContext(context.tenantId);
+      const rows = await db
+        .select()
+        .from(inboxMessages)
+        .where(
+          and(
+            eq(inboxMessages.tenantId, scoped.tenantId),
+            eq(inboxMessages.sourceSystem, sourceSystem),
+            eq(inboxMessages.messageId, messageId),
+          ),
+        )
+        .limit(1);
+      return rows[0] ?? null;
+    },
+
+    async listEvents(
+      context: TenantContext,
+      filters: {
+        sourceSystem?: string;
+        status?: "received" | "processing" | "processed" | "parked" | "dead_letter" | "ignored";
+        limit?: number;
+      } = {},
+    ): Promise<InboxClaim[]> {
+      const scoped = requireTenantContext(context.tenantId);
+      const conditions = [eq(inboxMessages.tenantId, scoped.tenantId)];
+      if (filters.sourceSystem)
+        conditions.push(eq(inboxMessages.sourceSystem, filters.sourceSystem));
+      if (filters.status) conditions.push(eq(inboxMessages.status, filters.status));
+      return db
+        .select()
+        .from(inboxMessages)
+        .where(and(...conditions))
+        .orderBy(asc(inboxMessages.createdAt))
+        .limit(Math.min(100, Math.max(1, filters.limit ?? 50)));
     },
 
     async claimNext(

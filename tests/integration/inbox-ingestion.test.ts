@@ -124,6 +124,125 @@ describe.skipIf(!testDatabaseUrl)("inbox ingestion", () => {
     expect(after.rows[0]?.count).toBe(before.rows[0]?.count);
   });
 
+  it("rejects a reused delivery id with a different payload and records the conflict", async () => {
+    if (!handle) throw new Error("test database was not opened");
+    const original = eventBody({
+      messageId: "conflict-message-1",
+      idempotencyKey: "conflict-key-1",
+      sourceEntityId: "COM-DEMO-1001",
+      payload: { orderSourceId: "COM-DEMO-1001", quantity: 1 },
+    });
+    await service.accept({
+      source: "wms",
+      tenantId: DEMO_TENANTS.northstar,
+      rawBody: original,
+      signatureHeader: createMockSignature(original, secret),
+      now,
+    });
+
+    const altered = eventBody({
+      messageId: "conflict-message-1",
+      idempotencyKey: "conflict-key-1",
+      sourceEntityId: "COM-DEMO-1001",
+      payload: { orderSourceId: "COM-DEMO-1001", quantity: 2 },
+    });
+    await expect(
+      service.accept({
+        source: "wms",
+        tenantId: DEMO_TENANTS.northstar,
+        rawBody: altered,
+        signatureHeader: createMockSignature(altered, secret),
+        now,
+      }),
+    ).rejects.toMatchObject({ code: "PAYLOAD_CONFLICT" });
+
+    const row = await service.repository.findByDelivery(
+      { tenantId: DEMO_TENANTS.northstar },
+      "mock-wms",
+      "conflict-message-1",
+    );
+    expect(row).toMatchObject({
+      errorCode: "INBOX_PAYLOAD_CONFLICT",
+      lastError: "delivery payload hash conflict",
+    });
+    const claim = await service.repository.claimNext(
+      { tenantId: DEMO_TENANTS.northstar },
+      "conflict-test-worker",
+      now,
+    );
+    expect(claim?.id).toBe(row?.id);
+    await service.repository.recordOutcome(
+      { tenantId: DEMO_TENANTS.northstar },
+      row?.id ?? "",
+      "conflict-test-worker",
+      { status: "processed" },
+    );
+  });
+
+  it("persists verified connection metadata and redacted event evidence", async () => {
+    const body = eventBody({
+      messageId: "verified-message-1",
+      idempotencyKey: "verified-key-1",
+      source: undefined,
+      eventType: "commerce.order.created.v1",
+      sourceEntityId: "COM-DEMO-1001",
+      payload: { orderSourceId: "COM-DEMO-1001", email: "person@example.invalid" },
+    });
+    const verifiedAt = new Date("2026-01-01T00:11:00.000Z");
+    const result = await service.accept({
+      source: "commerce",
+      tenantId: DEMO_TENANTS.northstar,
+      rawBody: body,
+      now,
+      verified: {
+        connectionId: "31111111-1111-4111-8111-111111111111",
+        sourceApiVersion: "2026-01",
+        signatureVerified: true,
+        signatureVerifiedAt: verifiedAt,
+      },
+    });
+    expect(result.status).toBe("received");
+
+    const row = await service.repository.findByDelivery(
+      { tenantId: DEMO_TENANTS.northstar },
+      "mock-commerce",
+      "verified-message-1",
+    );
+    expect(row).toMatchObject({
+      id: result.inboxId,
+      connectionId: "31111111-1111-4111-8111-111111111111",
+      sourceApiVersion: "2026-01",
+      signatureVerified: true,
+      signatureVerifiedAt: verifiedAt,
+      payload: { orderSourceId: "COM-DEMO-1001", email: "[REDACTED]" },
+    });
+    expect(
+      await service.repository.listEvents(
+        { tenantId: DEMO_TENANTS.northstar },
+        { sourceSystem: "mock-commerce", status: "received", limit: 10 },
+      ),
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ id: result.inboxId })]));
+    expect(
+      await service.repository.findByDelivery(
+        { tenantId: DEMO_TENANTS.bluebird },
+        "mock-commerce",
+        "verified-message-1",
+      ),
+    ).toBeNull();
+    const claim = await service.repository.claimNext(
+      { tenantId: DEMO_TENANTS.northstar },
+      "verified-test-worker",
+      now,
+    );
+    expect(claim?.id).toBe(result.inboxId);
+    await service.repository.recordOutcome(
+      { tenantId: DEMO_TENANTS.northstar },
+      result.inboxId,
+      "verified-test-worker",
+      { status: "processed" },
+    );
+  });
+
   it("parks an out-of-order WMS event with a visible prerequisite", async () => {
     const body = eventBody({ messageId: "parked-message-1", idempotencyKey: "parked-key-1" });
     const result = await service.accept({

@@ -5,11 +5,16 @@ import {
   type MockIngressSource,
 } from "@handoff/adapters";
 import type { AppConfig } from "@handoff/config";
-import { createInboxRepository, type Database } from "@handoff/db";
+import { createInboxRepository, InboxPayloadConflictError, type Database } from "@handoff/db";
 import type { IntegrationEvent } from "@handoff/domain";
+import { redactSensitive } from "@handoff/security";
 
 export type IngestionRejectionCode =
-  "BODY_TOO_LARGE" | "INVALID_SIGNATURE" | "INVALID_PAYLOAD" | "INVALID_TENANT";
+  | "BODY_TOO_LARGE"
+  | "INVALID_SIGNATURE"
+  | "INVALID_PAYLOAD"
+  | "INVALID_TENANT"
+  | "PAYLOAD_CONFLICT";
 
 export class IngestionRejectedError extends Error {
   readonly code: IngestionRejectionCode;
@@ -26,6 +31,13 @@ export type IngestionInput = {
   tenantId: string;
   rawBody: Buffer;
   signatureHeader?: string;
+  verified?: {
+    connectionId?: string;
+    sourceApiVersion?: string;
+    signatureVerified: boolean;
+    signatureVerifiedAt?: Date;
+    payloadRedacted?: unknown;
+  };
   now?: Date;
 };
 
@@ -74,13 +86,15 @@ export function createInboxIngestionService(dependencies: {
       if (input.rawBody.length > dependencies.config.ingestMaxBodyBytes) {
         throw new IngestionRejectedError("BODY_TOO_LARGE", "inbound body exceeds configured limit");
       }
-      if (
-        !verifyMockSignature(
+      const verified = input.verified;
+      const signatureVerified =
+        verified?.signatureVerified ??
+        verifyMockSignature(
           input.rawBody,
           input.signatureHeader,
           dependencies.config.mockWebhookSecrets[input.source],
-        )
-      ) {
+        );
+      if (!signatureVerified) {
         throw new IngestionRejectedError("INVALID_SIGNATURE", "inbound signature is invalid");
       }
 
@@ -96,16 +110,27 @@ export function createInboxIngestionService(dependencies: {
       }
 
       const prerequisite = prerequisiteFor(input.source, event);
-      const result = await repository.ingest(
-        { tenantId: input.tenantId },
-        event,
-        sha256Hex(input.rawBody),
-        {
-          ...(prerequisite ? { prerequisite } : {}),
-          signatureVerified: true,
-          signatureVerifiedAt: now,
-        },
-      );
+      let result;
+      try {
+        result = await repository.ingest(
+          { tenantId: input.tenantId },
+          event,
+          sha256Hex(input.rawBody),
+          {
+            ...(prerequisite ? { prerequisite } : {}),
+            ...(verified?.connectionId ? { connectionId: verified.connectionId } : {}),
+            ...(verified?.sourceApiVersion ? { sourceApiVersion: verified.sourceApiVersion } : {}),
+            signatureVerified: true,
+            signatureVerifiedAt: verified?.signatureVerifiedAt ?? now,
+            payloadRedacted: verified?.payloadRedacted ?? redactSensitive(event.payload),
+          },
+        );
+      } catch (error) {
+        if (error instanceof InboxPayloadConflictError) {
+          throw new IngestionRejectedError("PAYLOAD_CONFLICT", error.message);
+        }
+        throw error;
+      }
       return {
         messageId: result.message.messageId,
         inboxId: result.message.id,
